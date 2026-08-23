@@ -1,0 +1,381 @@
+{
+  "$defs": {
+    "ChangeOrigin": {
+      "enum": [
+        "committed",
+        "staged",
+        "unstaged",
+        "untracked"
+      ],
+      "title": "ChangeOrigin",
+      "type": "string"
+    },
+    "Comparison": {
+      "additionalProperties": false,
+      "properties": {
+        "head_commit": {
+          "pattern": "^[0-9a-f]{40,64}$",
+          "title": "Head Commit",
+          "type": "string"
+        },
+        "merge_base_commit": {
+          "pattern": "^[0-9a-f]{40,64}$",
+          "title": "Merge Base Commit",
+          "type": "string"
+        },
+        "requested_base_ref": {
+          "minLength": 1,
+          "title": "Requested Base Ref",
+          "type": "string"
+        },
+        "resolved_base_commit": {
+          "pattern": "^[0-9a-f]{40,64}$",
+          "title": "Resolved Base Commit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requested_base_ref",
+        "resolved_base_commit",
+        "merge_base_commit",
+        "head_commit"
+      ],
+      "title": "Comparison",
+      "type": "object"
+    },
+    "ContentBlob": {
+      "additionalProperties": false,
+      "properties": {
+        "data_b64": {
+          "title": "Data B64",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sha256",
+        "size",
+        "data_b64"
+      ],
+      "title": "ContentBlob",
+      "type": "object"
+    },
+    "ContentLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "per_file_bytes": {
+          "default": 1048576,
+          "minimum": 0,
+          "title": "Per File Bytes",
+          "type": "integer"
+        },
+        "total_bytes": {
+          "default": 10485760,
+          "minimum": 0,
+          "title": "Total Bytes",
+          "type": "integer"
+        }
+      },
+      "title": "ContentLimits",
+      "type": "object"
+    },
+    "FileChange": {
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "$ref": "#/$defs/FileState"
+        },
+        "effective": {
+          "$ref": "#/$defs/FileState"
+        },
+        "head": {
+          "$ref": "#/$defs/FileState"
+        },
+        "index": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "origins": {
+          "items": {
+            "$ref": "#/$defs/ChangeOrigin"
+          },
+          "minItems": 1,
+          "title": "Origins",
+          "type": "array"
+        },
+        "working": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "origins",
+        "base",
+        "head",
+        "index",
+        "working",
+        "effective"
+      ],
+      "title": "FileChange",
+      "type": "object"
+    },
+    "FileKind": {
+      "enum": [
+        "absent",
+        "regular",
+        "symlink",
+        "gitlink"
+      ],
+      "title": "FileKind",
+      "type": "string"
+    },
+    "FileState": {
+      "additionalProperties": false,
+      "properties": {
+        "binary": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Binary"
+        },
+        "content_captured": {
+          "title": "Content Captured",
+          "type": "boolean"
+        },
+        "content_identity": {
+          "title": "Content Identity",
+          "type": "string"
+        },
+        "identity_kind": {
+          "$ref": "#/$defs/IdentityKind"
+        },
+        "kind": {
+          "$ref": "#/$defs/FileKind"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mode"
+        },
+        "omission_reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OmissionReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "path": {
+          "$ref": "#/$defs/RawPath"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "mode",
+        "size",
+        "identity_kind",
+        "content_identity",
+        "binary",
+        "content_captured"
+      ],
+      "title": "FileState",
+      "type": "object"
+    },
+    "IdentityKind": {
+      "enum": [
+        "absent",
+        "sha256",
+        "git_oid"
+      ],
+      "title": "IdentityKind",
+      "type": "string"
+    },
+    "OmissionReason": {
+      "enum": [
+        "per_file_limit",
+        "total_limit"
+      ],
+      "title": "OmissionReason",
+      "type": "string"
+    },
+    "RawPath": {
+      "additionalProperties": false,
+      "properties": {
+        "display": {
+          "title": "Display",
+          "type": "string"
+        },
+        "raw_b64": {
+          "title": "Raw B64",
+          "type": "string"
+        },
+        "utf8": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Utf8"
+        }
+      },
+      "required": [
+        "raw_b64",
+        "display"
+      ],
+      "title": "RawPath",
+      "type": "object"
+    },
+    "RenameRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "new_path": {
+          "$ref": "#/$defs/RawPath"
+        },
+        "old_path": {
+          "$ref": "#/$defs/RawPath"
+        },
+        "origin": {
+          "$ref": "#/$defs/ChangeOrigin"
+        },
+        "similarity": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Similarity",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "origin",
+        "old_path",
+        "new_path",
+        "similarity"
+      ],
+      "title": "RenameRelation",
+      "type": "object"
+    },
+    "ScopeMode": {
+      "enum": [
+        "pending",
+        "committed-only"
+      ],
+      "title": "ScopeMode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "changes": {
+      "items": {
+        "$ref": "#/$defs/FileChange"
+      },
+      "title": "Changes",
+      "type": "array"
+    },
+    "comparison": {
+      "$ref": "#/$defs/Comparison"
+    },
+    "contents": {
+      "items": {
+        "$ref": "#/$defs/ContentBlob"
+      },
+      "title": "Contents",
+      "type": "array"
+    },
+    "contract": {
+      "const": "changeset",
+      "default": "changeset",
+      "title": "Contract",
+      "type": "string"
+    },
+    "empty": {
+      "title": "Empty",
+      "type": "boolean"
+    },
+    "identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Identity",
+      "type": "string"
+    },
+    "limits": {
+      "$ref": "#/$defs/ContentLimits"
+    },
+    "renames": {
+      "items": {
+        "$ref": "#/$defs/RenameRelation"
+      },
+      "title": "Renames",
+      "type": "array"
+    },
+    "repository_root": {
+      "title": "Repository Root",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/ScopeMode"
+    }
+  },
+  "required": [
+    "repository_root",
+    "scope",
+    "comparison",
+    "limits",
+    "empty",
+    "changes",
+    "renames",
+    "contents",
+    "identity"
+  ],
+  "title": "ChangeSet",
+  "type": "object"
+}

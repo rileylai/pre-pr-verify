@@ -71,3 +71,9 @@ Core execution and authority invariants cannot be waived by repository config or
 **Status:** Accepted
 
 Each milestone dogfoods only the capability it actually implements. A complete self-review first exists after 1.6 but is only additional release evidence until 1.7. Future candidates should be reviewed by a last-known-good verifier, and candidate self-review is never the sole trusted gate.
+
+## ADR-013: Fixed review skeleton with repository-native inputs
+
+**Status:** Accepted
+
+PrePR Verify owns the portable workflow, evidence, verdict, and non-waivable safety invariants. Requirements, canonical commands, scanners, impact conventions, and monorepo affected tooling are discovered from the repository or supplied by explicitly trusted policy. V1 does not embed language command/AST matrices, auto-install scanners, infer enterprise policy, or build a monorepo dependency engine; unresolved scope or required execution remains visible as an evidence gap.

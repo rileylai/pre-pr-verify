@@ -33,7 +33,16 @@ uv sync --dev
 uv run pytest
 ```
 
-The current Foundation contains only package and test-harness wiring. It intentionally contains no ChangeSet, review, executor, LLM, or GitHub implementation.
+Milestone 1.2 provides deterministic ChangeSet capture only:
+
+```sh
+uv run pre-pr-verify capture \
+  --repo /path/to/repository \
+  --base main \
+  --scope pending
+```
+
+The command writes canonical ChangeSet JSON to stdout unless `--output` is explicitly supplied. It performs no code review and emits no readiness verdict. Review discovery, execution, semantic reasoning, ReviewArtifact, and GitHub integration remain unimplemented.
 
 ## Documentation
 

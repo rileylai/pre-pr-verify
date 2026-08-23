@@ -10,13 +10,13 @@ Requirement and Standards precedence is a separate semantic-review concept defin
 
 ## Repository boundary
 
-All path decisions use canonical raw Git path components, not display strings. `.git/` is never part of the review payload. Symlinks are recorded but never followed. Explicit includes remain repository-bounded. Submodules are represented by gitlink identity and are not recursively reviewed in V1.
+All path decisions use canonical raw Git path components, not display strings. `.git/` is never part of the review payload. Symlinks are recorded but never followed. Filesystem capture opens every intermediate repository or Git-metadata directory without following symlinks; an intermediate symlink makes capture fail before outside content is read. Explicit includes remain repository-bounded. Submodules are represented by gitlink identity and are not recursively reviewed in V1.
 
 Git path parsing uses NUL-delimited byte output. Artifact paths have a reversible raw representation and a safe escaped display form; UTF-8 text is present only when decoding is lossless.
 
 ## Git read hardening
 
-Capture uses fixed structured arguments, no shell, no pager or prompts, NUL-delimited/plumbing output where possible, and a sanitized Git environment. External diff, textconv, filters, hooks, fsmonitor processes, aliases, and similar extension points must not execute. A repository that requires one of these mechanisms records a limitation rather than silently executing it.
+Capture uses fixed structured arguments, no shell, no pager or prompts, NUL-delimited/plumbing output where possible, and a sanitized Git environment. External diff, textconv, filters, hooks, fsmonitor processes, aliases, and similar extension points must not execute. Committed and staged comparisons use Git object data; unstaged comparison and its race fingerprint read working files directly without Git's conversion/filter pipeline. A repository that requires an extension or clean/smudge conversion records a limitation rather than silently executing it.
 
 ## Verification isolation
 

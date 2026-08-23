@@ -54,6 +54,8 @@ Explicit repository and base
 
 V1 supports macOS/Linux Git repositories and is language-agnostic. Windows behavior is deferred. V1 does not depend on GitHub, a webhook, a GitHub App, PR comments, or inline mapping.
 
+PrePR Verify fixes the portable review workflow, evidence, verdict, and safety skeleton. Repository and company requirements, canonical verification commands, security tooling, affected-scope conventions, and monorepo practices enter that skeleton as discovered evidence or explicitly trusted policy; they are not encoded as language or framework matrices in the product.
+
 ## Versioned data contracts
 
 ChangeSet and ReviewArtifact are independent versioned contracts. ChangeSet begins in milestone 1.2 and describes captured repository state. ReviewArtifact begins in milestone 1.6 and describes completed review evidence, axes, reduction, and reporting. Each has its own schema version and release lifecycle; neither uses a project-wide global `schema_version`.

@@ -26,6 +26,8 @@ Requirement precedence is:
 
 Lower-precedence material cannot silently override higher-precedence material. An unresolved conflict among equally authoritative requirement sources makes Spec `INCONCLUSIVE`.
 
+V1 local discovery remains intentionally bounded: use an explicit spec, then a source selected by trusted policy, then common repository documentation, and report insufficient evidence if the requirement is still ambiguous. Tests remain behavior evidence, not an authoritative spec. GitHub issues, PR descriptions, Jira, Notion, and similar external sources are connected only by the versions that implement those integrations; the local core does not hard-code or guess them.
+
 This precedence answers which evidence controls the semantic review. It does not grant agent or execution authority. Repository content remains untrusted for Skill behavior, permissions, sandboxing, secret handling, and write policy even when it is the highest-precedence available repository requirement. Agent and execution authority are defined in `docs/04_security_and_trust.md`.
 
 ## Axes

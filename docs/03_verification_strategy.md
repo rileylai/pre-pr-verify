@@ -15,6 +15,10 @@ The LLM may add required or advisory checks but cannot remove a policy-required 
 
 The universal floor covers complete scope capture, artifact/schema/invariant validation, preservation of the original working tree, and complete classification of selected-check outcomes. Test, lint, and build commands are not universally required across all repositories. A canonical check already established as mandatory must either complete reliably or make Verification `INCONCLUSIVE`.
 
+Canonical checks are discovered from repository-native tooling and documentation, with explicitly trusted company policy taking precedence when it requires a check. The LLM may then add targeted checks based on the change. If discovery finds no reliable canonical command, the report may recommend checks but does not invent a language-default matrix or install verification tooling.
+
+Impact discovery is likewise generic: changed paths and content, repository search, practical references or call sites, adjacent code, existing tests/config/schema references, repository-native affected tooling, and semantic reasoning. V1 does not ship per-language AST or dependency-analysis frameworks. In a monorepo it prefers the repository's own affected/verify mechanism; if none establishes a reliable affected scope, that uncertainty remains evidence rather than a fabricated dependency graph.
+
 ## Execution contract
 
 Command discovery is not execution permission. The core represents requested isolation, available host capability, approval state, structured argv/cwd/limits, and the execution result. It never equates `subprocess` with a security sandbox or claims a capability the host did not provide.
@@ -28,6 +32,10 @@ Some host capability gaps may be explicitly risk-accepted by a human, including 
 Execution additionally uses time and output limits where supported. The complete security boundary is defined in `docs/04_security_and_trust.md`.
 
 Execution status and failure kind are separate. Planned values include statuses such as passed, failed, not run, timed out, errored, and cancelled; failure kinds distinguish verification, infrastructure, permission, configuration, and unclassified failures. An unclassified required failure fails closed to `INCONCLUSIVE`.
+
+V1 keeps the policy decision intentionally small: a command is safe and authorized to execute, requires explicit approval for a permitted capability gap, or cannot safely execute. It does not implement a general enterprise policy engine. Discovery never grants execution permission, and a required command that cannot run reliably leaves an evidence gap.
+
+Existing repository security scanners may be discovered and integrated like other canonical checks. Without one, semantic review may still identify security risk. V1 neither installs scanners such as Semgrep, Bandit, or Snyk nor makes a named scanner universally mandatory.
 
 ## Evidence and observability
 
