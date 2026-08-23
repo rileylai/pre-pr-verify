@@ -9,7 +9,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-SCHEMA_VERSION = "1.0.0"
+LEGACY_CHANGESET_SCHEMA_VERSION = "1.0.0"
+CHANGESET_SCHEMA_VERSION = "1.1.0"
+# Kept as the capture-producing version for existing internal callers.
+SCHEMA_VERSION = CHANGESET_SCHEMA_VERSION
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 GIT_OID_PATTERN = r"^[0-9a-f]{40,64}$"
 
@@ -210,7 +213,42 @@ class FileChange(FrozenModel):
         return self
 
 
-class ChangeSet(FrozenModel):
+def _validate_common_changeset(value: Any) -> None:
+    if value.empty != (not value.changes):
+        raise ValueError("empty flag must match the change list")
+
+    blobs = {blob.sha256 for blob in value.contents}
+    if len(blobs) != len(value.contents):
+        raise ValueError("content blobs must have unique digests")
+    for change in value.changes:
+        for state in (
+            change.base,
+            change.head,
+            change.index,
+            change.working,
+            change.effective,
+        ):
+            if (
+                state is not None
+                and state.content_captured
+                and state.content_identity not in blobs
+            ):
+                raise ValueError("captured file state references a missing content blob")
+
+
+def _validate_explicit_include(path: RawPath) -> None:
+    raw = path.to_bytes()
+    if not raw or raw.startswith(b"/") or b"\x00" in raw:
+        raise ValueError("explicit include is not a valid repository-relative path")
+    components = raw.split(b"/")
+    if any(component in (b"", b".", b"..") for component in components):
+        raise ValueError("explicit include contains an unsafe path component")
+    if any(component.lower() == b".git" for component in components):
+        raise ValueError("explicit include cannot enter .git")
+
+
+class LegacyChangeSet(FrozenModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", title="ChangeSet")
     contract: Literal["changeset"] = "changeset"
     schema_version: Literal["1.0.0"] = "1.0.0"
     repository_root: str
@@ -230,30 +268,72 @@ class ChangeSet(FrozenModel):
         )
 
     @model_validator(mode="after")
-    def validate_contract(self) -> ChangeSet:
-        if self.empty != (not self.changes):
-            raise ValueError("empty flag must match the change list")
+    def validate_contract(self) -> LegacyChangeSet:
+        _validate_common_changeset(self)
         if self.identity != _hash_payload(self.semantic_payload()):
             raise ValueError("changeset identity does not match semantic payload")
-
-        blobs = {blob.sha256 for blob in self.contents}
-        if len(blobs) != len(self.contents):
-            raise ValueError("content blobs must have unique digests")
-        for change in self.changes:
-            for state in (
-                change.base,
-                change.head,
-                change.index,
-                change.working,
-                change.effective,
-            ):
-                if (
-                    state is not None
-                    and state.content_captured
-                    and state.content_identity not in blobs
-                ):
-                    raise ValueError("captured file state references a missing content blob")
         return self
+
+
+class ChangeSet(FrozenModel):
+    """Current 1.1.0 contract with reproducible explicit capture scope."""
+
+    contract: Literal["changeset"] = "changeset"
+    schema_version: Literal["1.1.0"] = "1.1.0"
+    repository_root: str
+    scope: ScopeMode
+    comparison: Comparison
+    limits: ContentLimits
+    explicit_includes: list[RawPath] = Field(default_factory=list)
+    empty: bool
+    changes: list[FileChange]
+    renames: list[RenameRelation]
+    contents: list[ContentBlob]
+    identity: str = Field(pattern=SHA256_PATTERN)
+
+    def semantic_payload(self) -> dict[str, Any]:
+        return self.model_dump(
+            mode="json",
+            exclude={"identity", "repository_root"},
+        )
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> ChangeSet:
+        _validate_common_changeset(self)
+        if self.identity != _hash_payload(self.semantic_payload()):
+            raise ValueError("changeset identity does not match semantic payload")
+        if self.explicit_includes != sorted(
+            self.explicit_includes, key=lambda value: value.to_bytes()
+        ) or len({item.raw_b64 for item in self.explicit_includes}) != len(
+            self.explicit_includes
+        ):
+            raise ValueError("explicit includes are not canonically ordered")
+        if self.scope is ScopeMode.COMMITTED_ONLY and self.explicit_includes:
+            raise ValueError("committed-only changeset cannot contain explicit includes")
+        for path in self.explicit_includes:
+            _validate_explicit_include(path)
+        return self
+
+
+ChangeSetDocument = ChangeSet | LegacyChangeSet
+
+
+def load_changeset(value: dict[str, Any] | str | bytes) -> ChangeSetDocument:
+    """Load one explicitly supported ChangeSet version without migration."""
+
+    payload = (
+        json.loads(value)
+        if isinstance(value, (str, bytes))
+        else value
+    )
+    if not isinstance(payload, dict):
+        raise ValueError("changeset document must be a JSON object")
+    version = payload.get("schema_version")
+    if version == LEGACY_CHANGESET_SCHEMA_VERSION:
+        return LegacyChangeSet.model_validate(payload)
+    if version == CHANGESET_SCHEMA_VERSION:
+        return ChangeSet.model_validate(payload)
+    raise ValueError(f"unsupported changeset schema version: {version!r}")
 
 
 def _hash_payload(payload: dict[str, Any]) -> str:
@@ -279,6 +359,7 @@ def build_changeset(
     changes: list[FileChange],
     contents: list[ContentBlob],
     renames: list[RenameRelation] | None = None,
+    explicit_includes: list[RawPath] | None = None,
 ) -> ChangeSet:
     ordered_changes = sorted(changes, key=_change_sort_key)
     ordered_contents = sorted(contents, key=lambda blob: blob.sha256)
@@ -297,6 +378,9 @@ def build_changeset(
         "scope": scope,
         "comparison": comparison,
         "limits": limits,
+        "explicit_includes": sorted(
+            explicit_includes or [], key=lambda value: value.to_bytes()
+        ),
         "empty": not ordered_changes,
         "changes": ordered_changes,
         "renames": ordered_renames,

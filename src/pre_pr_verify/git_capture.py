@@ -136,6 +136,10 @@ class _DisjointSet:
                 self.parent[left_root] = right_root
 
 
+class _RootedPathMissing(PreflightError):
+    """A rooted traversal found a missing intermediate component."""
+
+
 class _RootedReader:
     """Read beneath one trusted root without following any path component."""
 
@@ -165,6 +169,10 @@ class _RootedReader:
                 finally:
                     os.close(descriptor)
                 descriptor = next_descriptor
+        except FileNotFoundError as error:
+            raise _RootedPathMissing(
+                f"{self.label} path is missing"
+            ) from error
         except OSError as error:
             raise PreflightError(
                 f"{self.label} path escapes or crosses an unsafe directory"
@@ -1090,6 +1098,7 @@ def _capture_once(
         changes=changes,
         renames=renames,
         contents=blobs,
+        explicit_includes=[RawPath.from_bytes(path) for path in explicit_includes],
     )
 
 
@@ -1111,8 +1120,12 @@ def capture_changeset(
     runner = initial_runner if runner_factory is GitRunner else runner_factory(root)
     selected_limits = limits or ContentLimits()
     normalized_includes = tuple(
-        value if isinstance(value, bytes) else os.fsencode(value)
-        for value in explicit_includes
+        sorted(
+            {
+                value if isinstance(value, bytes) else os.fsencode(value)
+                for value in explicit_includes
+            }
+        )
     )
     if scope is ScopeMode.COMMITTED_ONLY and normalized_includes:
         raise PreflightError("explicit includes are not part of committed-only scope")

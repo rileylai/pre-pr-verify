@@ -79,3 +79,39 @@ Each milestone dogfoods only the capability it actually implements. A complete s
 PrePR Verify owns the portable workflow, evidence, verdict, and non-waivable safety invariants. Requirements, canonical commands, scanners, impact conventions, and monorepo affected tooling are discovered from the repository or supplied by explicitly trusted policy. V1 does not embed language command/AST matrices, auto-install scanners, infer enterprise policy, or build a monorepo dependency engine; unresolved scope or required execution remains visible as an evidence gap.
 
 Deterministic discovery selects a precedence tier and preserves its complete source candidate set. Content differences are not semantic-conflict evidence; that judgment belongs to semantic review. Later composed evidence must bind discovery to the reviewed ChangeSet/snapshot identity.
+
+## ADR-014: Direct disposable snapshots and minimal evidence binding
+
+**Status:** Accepted
+
+Materialize a fresh verification tree for each planned command directly from captured HEAD objects plus ChangeSet effective blobs, without clone checkout, repository filters, linked worktrees, or the author's Git metadata. Executable trees contain no `.git`; unsupported omitted content and gitlinks fail closed. Bind plan, discovery, canonical-guidance digests, deterministic materialization ordinal, execution request, capability, re-derived decision, and result through ChangeSet/discovery/snapshot identities. Repository/planner/trusted-policy input channels assign origin rather than accepting a caller-supplied authority label. The deterministic floor consists of structural invariants proven by artifact/control-flow validation, not commands missing results. These constraints provide moment consistency without introducing a provenance database, filesystem transaction engine, command dependency graph, or policy engine. Plain `subprocess` remains only a bounded process adapter, never a claimed sandbox.
+
+## ADR-015: Reproducible scope and bounded process lifetime
+
+**Status:** Accepted
+
+Explicit ignored-path includes are serialized in ChangeSet identity and reused by every consistency recapture. Execution deadlines cover process-group lifetime and pipe draining, including descendants that inherit stdout/stderr; no collector thread is allowed to extend a request indefinitely. Runtime cwd validation returns classified `NOT_RUN` evidence. SnapshotFile accepts only regular/symlink states with compatible modes. These are contract-level invariants, not a new sandbox or execution framework.
+
+## ADR-016: Version the reproducible ChangeSet scope
+
+**Status:** Accepted
+
+The established `changeset-1.0.0` schema and identity remain frozen as a legacy reader. Explicit ignored-path scope is a semantic addition, so capture emits `changeset-1.1.0` and `schemas/changeset-1.1.0.schema.json`; the loader supports only 1.0.0 and 1.1.0 without a migration framework. Invalid external include paths are rejected at model validation. Execution decisions carry a structured blocked failure kind so serialized `NOT_RUN` evidence cannot relabel capability, configuration, or permission causes. Snapshot manifests reject duplicate paths.
+
+## ADR-017: Record post-capture snapshot evidence gaps explicitly
+
+**Status:** Accepted
+
+Once a valid ChangeSet and plan establish review scope, inability to materialize complete effective content is execution evidence, not a new capture/preflight failure. 1.4 records an explicitly incomplete, file-less SnapshotManifest and a matching non-executable `ExecutionRequest`/`ExecutionResult` with a structured capability, configuration, or permission cause; required checks retain `required_evidence_gap`. Incomplete manifests cannot expose partial executable files, and no process starts from them.
+
+## ADR-018: Preserve executed results across late source-preservation failure
+
+**Status:** Accepted
+
+Snapshot materialization failure before a child starts produces the existing `NOT_RUN` evidence gap. If the final source recapture detects repository mutation after a child has already run, 1.4 retains that command's actual status, exit code, and bounded output, then adds a separately bound `SourcePreservationFailure` signal with a required evidence gap. No late preservation failure is rewritten as a process skip, and no final verdict reducer is added here.
+
+## ADR-019: Bounded literal lookahead redaction
+
+**Status:** Accepted
+
+Streaming explicit-value redaction uses a bounded literal lookahead matcher that visits every input offset, finds the union of all protected intervals (including different-offset and self-overlapping matches), and retains only a bounded tail across process-output chunks and truncation boundaries. If a boundary cannot be proven safe, the excerpt is suppressed. If the replacement marker overlaps any protected pattern, or pattern limits are exceeded, redaction fails closed by suppressing excerpts. A preservation-failure signal may bind only to an execution whose status is not `NOT_RUN`.

@@ -438,12 +438,13 @@ def test_explicit_include_can_capture_ignored_file_but_stays_repo_bounded(
     changeset = capture_changeset(
         repository,
         "main",
-        explicit_includes=[b"ignored.txt"],
+        explicit_includes=[b"ignored.txt", b"ignored.txt"],
     )
 
     included = change_for(changeset, "ignored.txt")
     assert included.origins == [ChangeOrigin.UNTRACKED]
     assert content_for(changeset, included.effective) == b"explicit\n"
+    assert [item.display for item in changeset.explicit_includes] == ["ignored.txt"]
 
     for unsafe in (b"../outside", b".git/config", b"nested/../../outside"):
         with pytest.raises(PreflightError):

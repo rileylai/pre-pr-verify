@@ -112,6 +112,62 @@ def test_empty_changeset_is_valid_and_has_identity() -> None:
     assert len(changeset.identity) == 64
 
 
+def test_explicit_includes_are_part_of_changeset_identity_and_ordering() -> None:
+    first = build_changeset(
+        repository_root="/tmp/repo",
+        scope=ScopeMode.PENDING,
+        comparison=Comparison(
+            requested_base_ref="main",
+            resolved_base_commit="1" * 40,
+            merge_base_commit="1" * 40,
+            head_commit="1" * 40,
+        ),
+        limits=ContentLimits(),
+        changes=[],
+        contents=[],
+        explicit_includes=[path(b"z-ignored.txt"), path(b"a-ignored.txt")],
+    )
+    second = build_changeset(
+        repository_root="/tmp/repo",
+        scope=ScopeMode.PENDING,
+        comparison=first.comparison,
+        limits=first.limits,
+        changes=[],
+        contents=[],
+        explicit_includes=[path(b"a-ignored.txt")],
+    )
+
+    assert [item.display for item in first.explicit_includes] == [
+        "a-ignored.txt",
+        "z-ignored.txt",
+    ]
+    assert first.schema_version == "1.1.0"
+    assert first.identity != second.identity
+    assert ChangeSet.model_validate_json(first.model_dump_json()) == first
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [b"../outside", b".git/config", b"/absolute", b"nested//file", b"nested/./file"],
+)
+def test_external_explicit_include_paths_are_rejected(invalid: bytes) -> None:
+    with pytest.raises(ValidationError, match="explicit include"):
+        build_changeset(
+            repository_root="/tmp/repo",
+            scope=ScopeMode.PENDING,
+            comparison=Comparison(
+                requested_base_ref="main",
+                resolved_base_commit="1" * 40,
+                merge_base_commit="1" * 40,
+                head_commit="1" * 40,
+            ),
+            limits=ContentLimits(),
+            changes=[],
+            contents=[],
+            explicit_includes=[path(invalid)],
+        )
+
+
 def test_captured_content_reference_must_exist() -> None:
     state = regular_state(b"missing.txt", b"missing")
     with pytest.raises(ValidationError, match="content blob"):
@@ -137,4 +193,3 @@ def test_captured_content_reference_must_exist() -> None:
             ],
             contents=[],
         )
-

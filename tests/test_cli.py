@@ -42,7 +42,7 @@ def test_capture_prints_valid_empty_changeset(repository: Path, capsys) -> None:
     output = json.loads(capsys.readouterr().out)
     assert result == 0
     assert output["contract"] == "changeset"
-    assert output["schema_version"] == "1.0.0"
+    assert output["schema_version"] == "1.1.0"
     assert output["empty"] is True
     assert "verdict" not in output
 

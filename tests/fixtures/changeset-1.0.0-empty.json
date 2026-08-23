@@ -1,0 +1,21 @@
+{
+  "contract": "changeset",
+  "schema_version": "1.0.0",
+  "scope": "pending",
+  "comparison": {
+    "requested_base_ref": "main",
+    "resolved_base_commit": "1111111111111111111111111111111111111111",
+    "merge_base_commit": "1111111111111111111111111111111111111111",
+    "head_commit": "1111111111111111111111111111111111111111"
+  },
+  "limits": {
+    "per_file_bytes": 1048576,
+    "total_bytes": 10485760
+  },
+  "empty": true,
+  "changes": [],
+  "renames": [],
+  "contents": [],
+  "repository_root": "/fixture/repo",
+  "identity": "630376e6b9563cefb45de48e6373d0c200a9896154a0b64fcbcdea61d6172110"
+}

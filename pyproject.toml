@@ -23,3 +23,8 @@ dev = [
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
+
+[tool.pre-pr-verify.verification]
+checks = [
+    { id = "deterministic-suite", level = "required", argv = ["python", "-c", "import sys; sys.path.insert(0, 'src'); import pytest; raise SystemExit(pytest.main(['-q']))"], reason = "The repository documents its deterministic pytest suite as the canonical development check; the explicit src path tests the snapshot candidate rather than an installed editable source tree." },
+]

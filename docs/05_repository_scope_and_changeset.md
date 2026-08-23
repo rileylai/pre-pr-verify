@@ -15,6 +15,8 @@ The default `pending` scope represents:
 
 The frozen milestone 1.2 CLI does not add an include flag. An embedding caller may pass explicitly approved ignored paths through the core capture API; these paths remain byte-validated, repository-bounded, and unable to enter `.git/`. `committed-only` rejects explicit includes.
 
+Explicit includes are part of the ChangeSet contract, not transient capture arguments. The canonical sorted `RawPath` list is serialized and included in the ChangeSet identity. Any later snapshot consistency recapture reuses that exact list, so an ignored file explicitly approved for the captured scope remains materializable and verifiable.
+
 ## Layered state
 
 A logical file change preserves base, HEAD, index, working, and effective states plus every applicable origin. A path may therefore have multiple origins. Committed and staged rename detection uses fixed Git object comparison (`-M50%`, Myers algorithm, bounded candidate set). Working-tree rename detection is limited to an unambiguous exact-content match and never invokes conversion filters. Copies are not inferred in milestone 1.2.
@@ -33,7 +35,9 @@ Symlinks are never followed, including symlinks in intermediate directory compon
 
 Capture compares HEAD, index identity, a deterministic porcelain-equivalent status/path fingerprint, and captured/effective working-content identity before and after collection. The status fingerprint is derived from fixed plumbing and direct filesystem state rather than invoking extension-capable working-tree diff/status conversion. A changed state discards the entire attempt and retries once. A second unstable attempt produces a capture failure; data from different moments is never blended.
 
-Capture instability is a capture/preflight failure when it prevents creation of a reliable ChangeSet. It therefore produces no readiness verdict. A later-stage inability to obtain required evidence from an already established, non-empty ChangeSet is instead a review-level `INCONCLUSIVE` result.
+Capture instability is a capture/preflight failure when it prevents creation of a reliable ChangeSet. It therefore produces no readiness verdict. A later-stage inability to obtain required evidence from an already established, non-empty ChangeSet is recorded by 1.4 as structured required-evidence-gap execution evidence; a later reducer may use that evidence for `INCONCLUSIVE`, but 1.4 does not implement the reducer.
+
+Milestone 1.4 consumes the captured identity when building a fresh disposable executable snapshot for each command. Every construction recaptures the source state before and after materialization, validates repository discovery and canonical-guidance digests against snapshot bytes with rooted no-follow reads, and records the ChangeSet, discovery, materialization ordinal, snapshot, request, and result bindings in planning/execution evidence. This is the minimum moment binding; it is not a provenance database.
 
 ## Empty effective state
 
@@ -43,7 +47,7 @@ A full pre-PR review cannot treat absence of change as evidence that Spec, Stand
 
 ## ChangeSet schema lifecycle
 
-ChangeSet has its own versioned schema beginning in milestone 1.2. Python typed models and code invariants are its executable source of truth; its deterministic generated JSON Schema is checked in. Its version lifecycle is independent of the ReviewArtifact schema introduced in milestone 1.6. A field named `schema_version` always versions the enclosing contract, never the entire project.
+ChangeSet has its own versioned schema beginning in milestone 1.2. The frozen `changeset-1.0.0` contract and identity remain readable without `explicit_includes`; the current capture contract is `changeset-1.1.0`, whose canonical serialized include list participates in identity. `load_changeset` supports exactly these two versions and performs no implicit migration; unknown versions are rejected. Each generated JSON Schema is checked in independently. The version lifecycle is independent of the ReviewArtifact schema introduced in milestone 1.6. A field named `schema_version` always versions the enclosing contract, never the entire project.
 
 ## Milestone 1.2 executable contract
 
@@ -58,4 +62,4 @@ It captures and validates a deterministic ChangeSet only. Output defaults to std
 
 Its hard test matrix includes real temporary repositories covering committed divergence and merge-base behavior; every pending layer, including tracked unstaged-only state; combined origins; deletion, rename, mode, symlink, gitlink, binary, large and ignored files; tab/newline hostile filenames; intermediate-symlink escape; invalid and empty scopes; HEAD/index/status/content capture races; deterministic identity; Git extension suppression; committed-only exclusion; and complete preservation of the source repository. Platform filesystems that cannot create non-UTF-8 names use an explicit skip plus byte-safe model coverage.
 
-The ChangeSet schema is generated from the typed model and checked in as `schemas/changeset-1.0.0.schema.json`. Schema drift is a deterministic test failure.
+The ChangeSet schemas are generated from the typed models and checked in as `schemas/changeset-1.0.0.schema.json` and `schemas/changeset-1.1.0.schema.json`. Schema drift for either supported contract is a deterministic test failure.

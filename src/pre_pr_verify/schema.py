@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 
 from pre_pr_verify.discovery_models import DiscoveryResult
-from pre_pr_verify.models import ChangeSet
+from pre_pr_verify.models import ChangeSet, LegacyChangeSet
+from pre_pr_verify.verification_models import VerificationEvidence
 
 
 def render_changeset_schema() -> str:
@@ -19,9 +20,26 @@ def render_changeset_schema() -> str:
     )
 
 
+def render_legacy_changeset_schema() -> str:
+    return (
+        json.dumps(
+            LegacyChangeSet.model_json_schema(),
+            ensure_ascii=True,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+
 def write_changeset_schema(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_changeset_schema(), encoding="utf-8")
+
+
+def write_legacy_changeset_schema(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_legacy_changeset_schema(), encoding="utf-8")
 
 
 def render_discovery_schema() -> str:
@@ -41,6 +59,27 @@ def write_discovery_schema(path: Path) -> None:
     path.write_text(render_discovery_schema(), encoding="utf-8")
 
 
+def render_verification_evidence_schema() -> str:
+    return (
+        json.dumps(
+            VerificationEvidence.model_json_schema(),
+            ensure_ascii=True,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+
+def write_verification_evidence_schema(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_verification_evidence_schema(), encoding="utf-8")
+
+
 if __name__ == "__main__":
-    write_changeset_schema(Path("schemas/changeset-1.0.0.schema.json"))
+    write_legacy_changeset_schema(Path("schemas/changeset-1.0.0.schema.json"))
+    write_changeset_schema(Path("schemas/changeset-1.1.0.schema.json"))
     write_discovery_schema(Path("schemas/discovery-1.0.0.schema.json"))
+    write_verification_evidence_schema(
+        Path("schemas/verification-evidence-1.0.0.schema.json")
+    )

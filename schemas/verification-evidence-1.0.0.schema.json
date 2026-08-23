@@ -1,0 +1,871 @@
+{
+  "$defs": {
+    "CapabilityName": {
+      "enum": [
+        "output_limits",
+        "network_isolation",
+        "resource_limits",
+        "process_isolation"
+      ],
+      "title": "CapabilityName",
+      "type": "string"
+    },
+    "ChangeSignals": {
+      "additionalProperties": false,
+      "properties": {
+        "added_path_count": {
+          "minimum": 0,
+          "title": "Added Path Count",
+          "type": "integer"
+        },
+        "changed_path_count": {
+          "minimum": 0,
+          "title": "Changed Path Count",
+          "type": "integer"
+        },
+        "changed_paths": {
+          "items": {
+            "$ref": "#/$defs/RawPath"
+          },
+          "title": "Changed Paths",
+          "type": "array"
+        },
+        "committed_path_count": {
+          "minimum": 0,
+          "title": "Committed Path Count",
+          "type": "integer"
+        },
+        "deleted_path_count": {
+          "minimum": 0,
+          "title": "Deleted Path Count",
+          "type": "integer"
+        },
+        "documentation_path_count": {
+          "minimum": 0,
+          "title": "Documentation Path Count",
+          "type": "integer"
+        },
+        "executable_path_count": {
+          "minimum": 0,
+          "title": "Executable Path Count",
+          "type": "integer"
+        },
+        "staged_path_count": {
+          "minimum": 0,
+          "title": "Staged Path Count",
+          "type": "integer"
+        },
+        "test_path_count": {
+          "minimum": 0,
+          "title": "Test Path Count",
+          "type": "integer"
+        },
+        "unstaged_path_count": {
+          "minimum": 0,
+          "title": "Unstaged Path Count",
+          "type": "integer"
+        },
+        "untracked_path_count": {
+          "minimum": 0,
+          "title": "Untracked Path Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "changed_paths",
+        "changed_path_count",
+        "test_path_count",
+        "documentation_path_count",
+        "added_path_count",
+        "deleted_path_count",
+        "executable_path_count",
+        "committed_path_count",
+        "staged_path_count",
+        "unstaged_path_count",
+        "untracked_path_count"
+      ],
+      "title": "ChangeSignals",
+      "type": "object"
+    },
+    "CheckKind": {
+      "enum": [
+        "structural_invariant",
+        "command"
+      ],
+      "title": "CheckKind",
+      "type": "string"
+    },
+    "CheckOrigin": {
+      "enum": [
+        "deterministic_floor",
+        "repository_canonical",
+        "trusted_policy",
+        "model_proposed"
+      ],
+      "title": "CheckOrigin",
+      "type": "string"
+    },
+    "CommandExecutionEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "ordinal": {
+          "minimum": 0,
+          "title": "Ordinal",
+          "type": "integer"
+        },
+        "result": {
+          "$ref": "#/$defs/ExecutionResult"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/SnapshotManifest"
+        }
+      },
+      "required": [
+        "ordinal",
+        "snapshot",
+        "result"
+      ],
+      "title": "CommandExecutionEvidence",
+      "type": "object"
+    },
+    "DecisionKind": {
+      "enum": [
+        "executable",
+        "requires_approval",
+        "cannot_safely_execute"
+      ],
+      "title": "DecisionKind",
+      "type": "string"
+    },
+    "ExecutionCapability": {
+      "additionalProperties": false,
+      "properties": {
+        "approval_waivable": {
+          "items": {
+            "$ref": "#/$defs/CapabilityName"
+          },
+          "title": "Approval Waivable",
+          "type": "array"
+        },
+        "approved_gaps": {
+          "items": {
+            "$ref": "#/$defs/CapabilityName"
+          },
+          "title": "Approved Gaps",
+          "type": "array"
+        },
+        "authority_separation": {
+          "title": "Authority Separation",
+          "type": "boolean"
+        },
+        "available": {
+          "items": {
+            "$ref": "#/$defs/CapabilityName"
+          },
+          "title": "Available",
+          "type": "array"
+        },
+        "git_protection": {
+          "title": "Git Protection",
+          "type": "boolean"
+        },
+        "repository_bound_cwd": {
+          "title": "Repository Bound Cwd",
+          "type": "boolean"
+        },
+        "secret_stripping": {
+          "title": "Secret Stripping",
+          "type": "boolean"
+        },
+        "source_preservation": {
+          "title": "Source Preservation",
+          "type": "boolean"
+        },
+        "structured_argv": {
+          "title": "Structured Argv",
+          "type": "boolean"
+        },
+        "verdict_invariants": {
+          "title": "Verdict Invariants",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "structured_argv",
+        "repository_bound_cwd",
+        "git_protection",
+        "source_preservation",
+        "authority_separation",
+        "secret_stripping",
+        "verdict_invariants",
+        "available",
+        "approval_waivable",
+        "approved_gaps"
+      ],
+      "title": "ExecutionCapability",
+      "type": "object"
+    },
+    "ExecutionDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_risks": {
+          "items": {
+            "$ref": "#/$defs/CapabilityName"
+          },
+          "title": "Accepted Risks",
+          "type": "array"
+        },
+        "blocked_failure_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FailureKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/DecisionKind"
+        },
+        "missing_capabilities": {
+          "items": {
+            "$ref": "#/$defs/CapabilityName"
+          },
+          "title": "Missing Capabilities",
+          "type": "array"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "missing_capabilities",
+        "accepted_risks",
+        "blocked_failure_kind",
+        "reasons"
+      ],
+      "title": "ExecutionDecision",
+      "type": "object"
+    },
+    "ExecutionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Argv",
+          "type": "array"
+        },
+        "check_id": {
+          "minLength": 1,
+          "title": "Check Id",
+          "type": "string"
+        },
+        "cwd": {
+          "default": ".",
+          "title": "Cwd",
+          "type": "string"
+        },
+        "cwd_validation_failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FailureKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "nonzero_failure_kind": {
+          "$ref": "#/$defs/FailureKind",
+          "default": "verification"
+        },
+        "output_limit_bytes": {
+          "exclusiveMinimum": 0,
+          "maximum": 16777216,
+          "title": "Output Limit Bytes",
+          "type": "integer"
+        },
+        "required_capabilities": {
+          "items": {
+            "$ref": "#/$defs/CapabilityName"
+          },
+          "title": "Required Capabilities",
+          "type": "array"
+        },
+        "requirement_level": {
+          "$ref": "#/$defs/RequirementLevel"
+        },
+        "snapshot_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Snapshot Identity",
+          "type": "string"
+        },
+        "snapshot_validation_failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FailureKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "timeout_seconds": {
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Timeout Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "check_id",
+        "snapshot_identity",
+        "requirement_level",
+        "argv",
+        "timeout_seconds",
+        "output_limit_bytes",
+        "required_capabilities"
+      ],
+      "title": "ExecutionRequest",
+      "type": "object"
+    },
+    "ExecutionResult": {
+      "additionalProperties": false,
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/ExecutionCapability"
+        },
+        "decision": {
+          "$ref": "#/$defs/ExecutionDecision"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Exit Code"
+        },
+        "failure_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FailureKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request": {
+          "$ref": "#/$defs/ExecutionRequest"
+        },
+        "required_evidence_gap": {
+          "title": "Required Evidence Gap",
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/ExecutionStatus"
+        },
+        "stderr": {
+          "$ref": "#/$defs/OutputEvidence"
+        },
+        "stdout": {
+          "$ref": "#/$defs/OutputEvidence"
+        }
+      },
+      "required": [
+        "request",
+        "capability",
+        "decision",
+        "status",
+        "failure_kind",
+        "exit_code",
+        "duration_ms",
+        "stdout",
+        "stderr",
+        "required_evidence_gap"
+      ],
+      "title": "ExecutionResult",
+      "type": "object"
+    },
+    "ExecutionStatus": {
+      "enum": [
+        "passed",
+        "failed",
+        "not_run",
+        "timed_out",
+        "errored",
+        "cancelled"
+      ],
+      "title": "ExecutionStatus",
+      "type": "string"
+    },
+    "FailureKind": {
+      "enum": [
+        "verification",
+        "infrastructure",
+        "permission",
+        "configuration",
+        "capability",
+        "unclassified"
+      ],
+      "title": "FailureKind",
+      "type": "string"
+    },
+    "OutputEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "excerpt": {
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "redacted": {
+          "title": "Redacted",
+          "type": "boolean"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "total_bytes": {
+          "minimum": 0,
+          "title": "Total Bytes",
+          "type": "integer"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "excerpt",
+        "sha256",
+        "total_bytes",
+        "truncated",
+        "redacted"
+      ],
+      "title": "OutputEvidence",
+      "type": "object"
+    },
+    "PlannedCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Argv"
+        },
+        "check_id": {
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Check Id",
+          "type": "string"
+        },
+        "cwd": {
+          "default": ".",
+          "title": "Cwd",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/CheckKind"
+        },
+        "origin": {
+          "$ref": "#/$defs/CheckOrigin"
+        },
+        "requirement_level": {
+          "$ref": "#/$defs/RequirementLevel"
+        },
+        "selection_reason": {
+          "minLength": 1,
+          "title": "Selection Reason",
+          "type": "string"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RawPath"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Sha256"
+        },
+        "source_size": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Size"
+        },
+        "trusted_policy_label": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trusted Policy Label"
+        },
+        "trusted_policy_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trusted Policy Sha256"
+        }
+      },
+      "required": [
+        "check_id",
+        "requirement_level",
+        "kind",
+        "origin",
+        "selection_reason"
+      ],
+      "title": "PlannedCheck",
+      "type": "object"
+    },
+    "RawPath": {
+      "additionalProperties": false,
+      "properties": {
+        "display": {
+          "title": "Display",
+          "type": "string"
+        },
+        "raw_b64": {
+          "title": "Raw B64",
+          "type": "string"
+        },
+        "utf8": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Utf8"
+        }
+      },
+      "required": [
+        "raw_b64",
+        "display"
+      ],
+      "title": "RawPath",
+      "type": "object"
+    },
+    "RequirementLevel": {
+      "enum": [
+        "required",
+        "advisory"
+      ],
+      "title": "RequirementLevel",
+      "type": "string"
+    },
+    "SnapshotFile": {
+      "additionalProperties": false,
+      "properties": {
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SnapshotKind"
+        },
+        "mode": {
+          "enum": [
+            "100644",
+            "100755",
+            "120000"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/RawPath"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "mode",
+        "kind",
+        "size",
+        "content_sha256"
+      ],
+      "title": "SnapshotFile",
+      "type": "object"
+    },
+    "SnapshotKind": {
+      "enum": [
+        "regular",
+        "symlink"
+      ],
+      "title": "SnapshotKind",
+      "type": "string"
+    },
+    "SnapshotManifest": {
+      "additionalProperties": false,
+      "properties": {
+        "changeset_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Changeset Identity",
+          "type": "string"
+        },
+        "complete": {
+          "default": true,
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "discovery_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Discovery Identity",
+          "type": "string"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/SnapshotFile"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Identity",
+          "type": "string"
+        },
+        "materialization_failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FailureKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "materialization_ordinal": {
+          "minimum": 0,
+          "title": "Materialization Ordinal",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "materialization_ordinal",
+        "changeset_identity",
+        "discovery_identity",
+        "files",
+        "identity"
+      ],
+      "title": "SnapshotManifest",
+      "type": "object"
+    },
+    "SourcePreservationFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "minLength": 1,
+          "title": "Check Id",
+          "type": "string"
+        },
+        "failure_kind": {
+          "const": "capability",
+          "default": "capability",
+          "title": "Failure Kind",
+          "type": "string"
+        },
+        "ordinal": {
+          "minimum": 0,
+          "title": "Ordinal",
+          "type": "integer"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "required_evidence_gap": {
+          "const": true,
+          "default": true,
+          "title": "Required Evidence Gap",
+          "type": "boolean"
+        },
+        "snapshot_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Snapshot Identity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ordinal",
+        "check_id",
+        "snapshot_identity",
+        "reason"
+      ],
+      "title": "SourcePreservationFailure",
+      "type": "object"
+    },
+    "VerificationPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "changeset_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Changeset Identity",
+          "type": "string"
+        },
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/PlannedCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "contract": {
+          "const": "verification_plan",
+          "default": "verification_plan",
+          "title": "Contract",
+          "type": "string"
+        },
+        "discovery_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Discovery Identity",
+          "type": "string"
+        },
+        "identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Identity",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "signals": {
+          "$ref": "#/$defs/ChangeSignals"
+        }
+      },
+      "required": [
+        "changeset_identity",
+        "discovery_identity",
+        "signals",
+        "checks",
+        "identity"
+      ],
+      "title": "VerificationPlan",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "const": "verification_evidence",
+      "default": "verification_evidence",
+      "title": "Contract",
+      "type": "string"
+    },
+    "executions": {
+      "items": {
+        "$ref": "#/$defs/CommandExecutionEvidence"
+      },
+      "title": "Executions",
+      "type": "array"
+    },
+    "identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Identity",
+      "type": "string"
+    },
+    "plan": {
+      "$ref": "#/$defs/VerificationPlan"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_preservation_failures": {
+      "items": {
+        "$ref": "#/$defs/SourcePreservationFailure"
+      },
+      "title": "Source Preservation Failures",
+      "type": "array"
+    }
+  },
+  "required": [
+    "plan",
+    "executions",
+    "identity"
+  ],
+  "title": "VerificationEvidence",
+  "type": "object"
+}
