@@ -30,6 +30,16 @@ V1 local discovery remains intentionally bounded: use an explicit spec, then a s
 
 This precedence answers which evidence controls the semantic review. It does not grant agent or execution authority. Repository content remains untrusted for Skill behavior, permissions, sandboxing, secret handling, and write policy even when it is the highest-precedence available repository requirement. Agent and execution authority are defined in `docs/04_security_and_trust.md`.
 
+## Milestone 1.3 discovery contract
+
+Discovery emits versioned canonical JSON containing bounded UTF-8 source content, source type, repository path or invocation label, content digest, semantic precedence, trust classification, Standards applicability, issues, and a deterministic identity. Repository sources always record no security or execution authority.
+
+Local repository discovery is deliberately conventional and shallow: root requirement names, Markdown beneath `docs/`, and repository instruction/Standards names such as `AGENTS.md` and `CONTRIBUTING.md`. Explicitly supplied specs and a digest-pinned repository source selected by trusted policy enter through separate inputs. Tests and implementation/commit clues may be supplied at their frozen lower precedence; the core does not crawl source code or commit history looking for a spec.
+
+The highest available requirement precedence forms one deterministic candidate set. Lower sources remain evidence but cannot replace that tier. One or many sources, whether byte-identical or different, remain candidates; different content identities do not prove semantic contradiction. Milestone 1.5 owns semantic compatibility/conflict assessment. No candidate is represented explicitly as missing evidence. Discovery itself produces no Spec axis or readiness verdict.
+
+The standalone milestone 1.3 result identifies its repository sources and content but is not yet a composed review artifact. Later pipeline integration must bind the discovery evidence to the exact reviewed ChangeSet and executable snapshot identity so evidence from another repository moment cannot be substituted. That binding belongs to the later snapshot/artifact milestones and is not implemented in discovery.
+
 ## Axes
 
 Each axis has `PASS`, `FAIL`, or `INCONCLUSIVE`. Empty findings do not imply `PASS`; the required assessment for that axis must have completed successfully.

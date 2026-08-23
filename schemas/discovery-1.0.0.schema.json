@@ -1,0 +1,296 @@
+{
+  "$defs": {
+    "DiscoveryIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/DiscoveryIssueKind"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RawPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "detail"
+      ],
+      "title": "DiscoveryIssue",
+      "type": "object"
+    },
+    "DiscoveryIssueKind": {
+      "enum": [
+        "unsafe_path",
+        "source_too_large",
+        "unsupported_encoding",
+        "source_limit_reached"
+      ],
+      "title": "DiscoveryIssueKind",
+      "type": "string"
+    },
+    "DiscoverySource": {
+      "additionalProperties": false,
+      "properties": {
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "content_utf8": {
+          "title": "Content Utf8",
+          "type": "string"
+        },
+        "execution_authority": {
+          "const": "none",
+          "default": "none",
+          "title": "Execution Authority",
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RawPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requirement_precedence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequirementPrecedence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "security_authority": {
+          "const": "none",
+          "default": "none",
+          "title": "Security Authority",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "source_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "$ref": "#/$defs/SourceType"
+        },
+        "standards_scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RawPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trust": {
+          "$ref": "#/$defs/SourceTrust"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type",
+        "label",
+        "path",
+        "content_sha256",
+        "size",
+        "content_utf8",
+        "trust",
+        "requirement_precedence",
+        "standards_scope"
+      ],
+      "title": "DiscoverySource",
+      "type": "object"
+    },
+    "RawPath": {
+      "additionalProperties": false,
+      "properties": {
+        "display": {
+          "title": "Display",
+          "type": "string"
+        },
+        "raw_b64": {
+          "title": "Raw B64",
+          "type": "string"
+        },
+        "utf8": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Utf8"
+        }
+      },
+      "required": [
+        "raw_b64",
+        "display"
+      ],
+      "title": "RawPath",
+      "type": "object"
+    },
+    "RequirementPrecedence": {
+      "enum": [
+        "explicit",
+        "trusted_policy",
+        "repository_documentation",
+        "test_evidence",
+        "discovery_clue"
+      ],
+      "title": "RequirementPrecedence",
+      "type": "string"
+    },
+    "RequirementResolution": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_source_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Candidate Source Ids",
+          "type": "array"
+        },
+        "precedence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequirementPrecedence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/RequirementResolutionStatus"
+        }
+      },
+      "required": [
+        "status",
+        "precedence",
+        "candidate_source_ids"
+      ],
+      "title": "RequirementResolution",
+      "type": "object"
+    },
+    "RequirementResolutionStatus": {
+      "enum": [
+        "candidates",
+        "missing"
+      ],
+      "title": "RequirementResolutionStatus",
+      "type": "string"
+    },
+    "SourceTrust": {
+      "enum": [
+        "invocation",
+        "trusted_selection",
+        "untrusted_repository"
+      ],
+      "title": "SourceTrust",
+      "type": "string"
+    },
+    "SourceType": {
+      "enum": [
+        "explicit_spec",
+        "trusted_policy_selected",
+        "repository_requirement",
+        "repository_standard",
+        "test_evidence",
+        "discovery_clue"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "const": "discovery",
+      "default": "discovery",
+      "title": "Contract",
+      "type": "string"
+    },
+    "identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Identity",
+      "type": "string"
+    },
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/DiscoveryIssue"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "repository_root": {
+      "title": "Repository Root",
+      "type": "string"
+    },
+    "requirement_resolution": {
+      "$ref": "#/$defs/RequirementResolution"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/DiscoverySource"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "standards_source_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Standards Source Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "repository_root",
+    "sources",
+    "requirement_resolution",
+    "standards_source_ids",
+    "issues",
+    "identity"
+  ],
+  "title": "DiscoveryResult",
+  "type": "object"
+}

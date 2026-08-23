@@ -504,7 +504,7 @@ def test_hostile_non_utf8_filename_is_reversible(repository: Path) -> None:
             0o644,
         )
     except OSError as error:
-        if error.errno != errno.EILSEQ:
+        if error.errno not in (errno.EILSEQ, errno.EPERM):
             raise
         pytest.skip(f"managed macOS filesystem rejects non-UTF-8 names: {error}")
     try:

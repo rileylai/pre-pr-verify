@@ -10,7 +10,7 @@ Requirement and Standards precedence is a separate semantic-review concept defin
 
 ## Repository boundary
 
-All path decisions use canonical raw Git path components, not display strings. `.git/` is never part of the review payload. Symlinks are recorded but never followed. Filesystem capture opens every intermediate repository or Git-metadata directory without following symlinks; an intermediate symlink makes capture fail before outside content is read. Explicit includes remain repository-bounded. Submodules are represented by gitlink identity and are not recursively reviewed in V1.
+All path decisions use canonical raw Git path components, not display strings. `.git/` is never part of the review payload. Symlinks are recorded but never followed. Filesystem capture and discovery source reads open every intermediate repository or Git-metadata directory without following symlinks; an intermediate symlink makes the operation fail or records an unreadable source before outside content is read. Explicit includes and trusted-policy source selections remain repository-bounded. Submodules are represented by gitlink identity and are not recursively reviewed in V1.
 
 Git path parsing uses NUL-delimited byte output. Artifact paths have a reversible raw representation and a safe escaped display form; UTF-8 text is present only when decoding is lossless.
 

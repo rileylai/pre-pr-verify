@@ -42,7 +42,7 @@ uv run pre-pr-verify capture \
   --scope pending
 ```
 
-The command writes canonical ChangeSet JSON to stdout unless `--output` is explicitly supplied. It performs no code review and emits no readiness verdict. Review discovery, execution, semantic reasoning, ReviewArtifact, and GitHub integration remain unimplemented.
+The command writes canonical ChangeSet JSON to stdout unless `--output` is explicitly supplied. It performs no code review and emits no readiness verdict. The Python library also provides bounded requirement and Standards source discovery; execution, semantic reasoning, ReviewArtifact, and GitHub integration remain unimplemented.
 
 ## Documentation
 

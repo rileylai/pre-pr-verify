@@ -77,3 +77,5 @@ Each milestone dogfoods only the capability it actually implements. A complete s
 **Status:** Accepted
 
 PrePR Verify owns the portable workflow, evidence, verdict, and non-waivable safety invariants. Requirements, canonical commands, scanners, impact conventions, and monorepo affected tooling are discovered from the repository or supplied by explicitly trusted policy. V1 does not embed language command/AST matrices, auto-install scanners, infer enterprise policy, or build a monorepo dependency engine; unresolved scope or required execution remains visible as an evidence gap.
+
+Deterministic discovery selects a precedence tier and preserves its complete source candidate set. Content differences are not semantic-conflict evidence; that judgment belongs to semantic review. Later composed evidence must bind discovery to the reviewed ChangeSet/snapshot identity.
