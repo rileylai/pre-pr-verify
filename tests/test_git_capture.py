@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import errno
 import hashlib
 import os
 import subprocess
@@ -502,7 +503,9 @@ def test_hostile_non_utf8_filename_is_reversible(repository: Path) -> None:
             os.O_WRONLY | os.O_CREAT,
             0o644,
         )
-    except PermissionError as error:
+    except OSError as error:
+        if error.errno != errno.EILSEQ:
+            raise
         pytest.skip(f"managed macOS filesystem rejects non-UTF-8 names: {error}")
     try:
         os.write(descriptor, b"hostile path\n")
