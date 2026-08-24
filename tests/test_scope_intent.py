@@ -13,6 +13,7 @@ from pre_pr_verify.errors import (
     ScopeSelectionRequired,
 )
 from pre_pr_verify.models import ChangeOrigin, ScopeMode
+from pre_pr_verify.pre_review_setup import PreReviewSetup, RequirementCandidate
 from pre_pr_verify.scope_intent import (
     AdvisoryAction,
     PreviewThresholds,
@@ -221,6 +222,77 @@ def test_head_movement_after_selection_requires_setup_restart(repository: Path) 
 
     with pytest.raises(PreflightError, match="HEAD changed.*restart"):
         build_scope_preview(resolved)
+
+
+def ready_setup(resolved) -> PreReviewSetup:
+    setup = PreReviewSetup(
+        interactive=True,
+        requirement_candidates=(
+            RequirementCandidate("a" * 64, "Repository requirement"),
+        ),
+        recommended_scope_number=1,
+    )
+    setup.submit("1")
+    setup.bind_scope(resolved)
+    setup.submit("1")
+    setup.submit("1")
+    setup.submit("yes")
+    return setup
+
+
+def test_ready_setup_accepts_an_unchanged_resolved_scope(repository: Path) -> None:
+    options = discover_scope_options(repository)
+    resolved = resolve_scope_selection(
+        options,
+        interactive=True,
+        intent=ScopeIntent.WORKING_CHANGES,
+    )
+    setup = ready_setup(resolved)
+
+    setup.require_ready_to_review()
+
+
+def test_ready_setup_rejects_working_scope_mutation(repository: Path) -> None:
+    options = discover_scope_options(repository)
+    resolved = resolve_scope_selection(
+        options,
+        interactive=True,
+        intent=ScopeIntent.WORKING_CHANGES,
+    )
+    setup = ready_setup(resolved)
+    write(repository, "new.py", "new = True\n")
+
+    with pytest.raises(PreflightError, match="stale.*restart"):
+        setup.require_ready_to_review()
+
+
+def test_ready_setup_rejects_working_content_mutation(repository: Path) -> None:
+    write(repository, "app.py", "value = 2\n")
+    options = discover_scope_options(repository)
+    resolved = resolve_scope_selection(
+        options,
+        interactive=True,
+        intent=ScopeIntent.WORKING_CHANGES,
+    )
+    setup = ready_setup(resolved)
+    write(repository, "app.py", "value = 3\n")
+
+    with pytest.raises(PreflightError, match="stale.*restart"):
+        setup.require_ready_to_review()
+
+
+def test_ready_setup_rejects_head_movement(repository: Path) -> None:
+    options = discover_scope_options(repository)
+    resolved = resolve_scope_selection(
+        options,
+        interactive=True,
+        intent=ScopeIntent.WORKING_CHANGES,
+    )
+    setup = ready_setup(resolved)
+    commit(repository, "moved.py", "moved = True\n", "move HEAD")
+
+    with pytest.raises(PreflightError, match="stale.*restart"):
+        setup.require_ready_to_review()
 
 
 def test_headless_missing_scope_fails_closed(repository: Path) -> None:

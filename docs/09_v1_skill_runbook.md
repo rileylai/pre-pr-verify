@@ -8,6 +8,7 @@ captures a `ChangeSet`; it is not a full-review shortcut.
 
 ```python
 from pre_pr_verify import __version__
+from pre_pr_verify.build_identity import installed_core_identity
 from pre_pr_verify.discovery import ProvidedRequirement, discover_review_sources
 from pre_pr_verify.executor import execute_verification_plan
 from pre_pr_verify.git_capture import capture_changeset
@@ -44,6 +45,11 @@ from pre_pr_verify.scope_intent import (
     discover_scope_options,
     recommend_scope,
     resolve_scope_selection,
+)
+from pre_pr_verify.pre_review_setup import (
+    PreReviewSetup,
+    RequirementCandidate,
+    SetupPhase,
 )
 from pre_pr_verify.verification import (
     PlannerCheckInput,
@@ -120,6 +126,19 @@ ChangeSet.
 
 ### Numbered interactive setup
 
+Create one `PreReviewSetup` before rendering the first menu. After scope capture
+and discovery, call `set_requirement_candidates(...)` with the complete winning
+set (source ID plus bounded label). Render only `current_step()` data and feed
+each numeric/Enter answer to `submit(...)`. The coordinator has no input or
+prompt function: in headless mode, pass structured answers directly. After the
+explicit scope is resolved and its preview is accepted, call
+`setup.bind_scope(resolved_scope)` before capture to bind the existing scope
+resolver identity without recapturing a ChangeSet.
+Before starting canonical semantic review, always call
+`require_ready_to_review(current_scope=resolved_scope)`; it rejects every phase
+except `READY_TO_REVIEW`, rejects cancellation, and rejects a stale repository
+or scope. Do not mutate its phase or bypass the guard.
+
 The Skill's human-facing setup uses stable numeric choices rather than asking
 the user to repeat scope labels. Display this top-level menu in this order:
 
@@ -165,6 +184,9 @@ at explicit precedence. Do not infer requirements from implementation code,
 tests, or comments merely to obtain `PASS`. A candidate set that cannot be
 displayed within the bounded setup limit must not be silently truncated; offer
 explicit criteria, an explicit missing-requirements decision, or cancel.
+`PreReviewSetup` exposes the complete candidate count and an overflow flag in
+this case, presents no misleading candidate subset, and exposes only those
+three legal actions. The full discovery candidate set remains unchanged.
 
 ### Verification authorization setup
 
@@ -242,15 +264,22 @@ a specific missing capability only when trusted policy first lists it in
 both lists empty.
 
 `verifier_build` identifies the installed PrePR Verify core, not the author
-repository. For the normal Skill checkout use `git:<commit>` from the Skill
-checkout's own `git rev-parse HEAD`, but only when both staged and unstaged
-`src/pre_pr_verify/` are clean. A candidate runner may instead supply an
-immutable candidate build ID. A built installation may use an installer-recorded
-wheel SHA-256. If none of those identities is available, fail preflight and do
-not create a ReviewArtifact. Never invent this value from repository prose.
+repository. Normal released/copied Skill and wheel installations use
+`installed_core_identity()`, a bounded SHA-256 identity over the installed
+Python core. It does not inspect `.git` or the target repository, is stable for
+identical installed content, and changes with core content. A trusted release
+runner may instead supply an installer-recorded wheel SHA-256 or immutable
+candidate build ID. Supply the chosen value independently to both
+ReviewArtifact construction and loading. Never copy it from serialized artifact
+metadata or repository prose, and never claim a Git SHA that was not
+established.
 
 ## Required sequence
 
+0. Drive `PreReviewSetup` through every phase, bind the confirmed resolved scope,
+   and call `require_ready_to_review(current_scope=resolved_scope)` before
+   canonical review. Cancellation produces no verdict. In headless use, any
+   missing structured setup answer fails without calling or waiting on input.
 1. Resolve and preview the scope as above, obtain explicit confirmation, then
    call `capture_resolved_scope(resolved)`, or capture the exact explicit
    headless scope with
@@ -331,6 +360,13 @@ not create a ReviewArtifact. Never invent this value from repository prose.
 
    The loader rejects forged identities, references, missing winning-requirement
    comparisons, and invalid missing-requirement semantics.
+   If complete semantic reconciliation over a non-empty established scope
+   raises `SemanticLimitExceeded`, retain its `SemanticLimitGap`, mark every
+   affected axis `INCONCLUSIVE` with `required_evidence_gap=True`, and build the
+   structured review-level assessment with that gap. A real
+   `requirement_comparisons...` collection gap may explain incomplete winning
+   candidate coverage; no other gap may. Do not drop candidates, synthesize
+   comparisons, or return preflight/code 3.
 7. Give the reducer an externally known verifier version and build identifier;
    do not derive them from repository prose. Build and reload the final artifact:
 

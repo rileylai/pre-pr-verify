@@ -77,6 +77,9 @@ def test_skill_runbook_routes_every_canonical_stage_and_policy_boundary() -> Non
         "resolve_scope_selection",
         "build_scope_preview",
         "capture_resolved_scope",
+        "PreReviewSetup",
+        "require_ready_to_review",
+        "installed_core_identity",
     }
 
     assert all(name in runbook for name in required_calls)
@@ -85,8 +88,7 @@ def test_skill_runbook_routes_every_canonical_stage_and_policy_boundary() -> Non
     assert "reporting failure" in runbook.lower()
     assert "uv run python" in runbook
     assert "conservatively require all four" in runbook
-    assert "fail preflight" in runbook
-    assert "git:<commit>" in runbook
+    assert "core-sha256" in runbook or "installed_core_identity" in runbook
     assert "recommend != infer" in runbook
     assert "interactive=False" in runbook
     assert "review_focus" in runbook
@@ -141,7 +143,7 @@ def test_runtime_has_no_developer_path_or_provider_key_dependency() -> None:
 def test_current_version_and_documented_boundaries() -> None:
     readme = Path("README.md").read_text()
 
-    assert __version__ == "0.1.2"
+    assert __version__ == "0.1.3"
     assert Path(".python-version").read_text().strip() == "3.12.13"
     assert "Semantic review, ReviewArtifact reduction/reporting, and GitHub integration remain unimplemented" not in readme
     assert "No `.env`" in readme

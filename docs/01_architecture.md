@@ -98,3 +98,11 @@ Git metadata before full source capture or semantic loading. Confirmation is
 the boundary between metadata-only setup and the unchanged deterministic
 ChangeSet. The ChangeSet and ReviewArtifact contracts remain the only canonical
 readiness boundaries.
+
+The deterministic `PreReviewSetup` coordinator is likewise orchestration
+support. It owns only bounded choice records, the ordered
+`SCOPE -> REQUIREMENTS -> VERIFICATION -> FINAL_CONFIRMATION -> READY_TO_REVIEW`
+state transitions, cancellation, and the readiness guard. The Skill owns all
+rendering and conversation. Existing capture, discovery, execution capability,
+semantic, and reduction contracts remain the only owners of their respective
+decisions and artifacts.

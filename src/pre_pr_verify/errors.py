@@ -14,5 +14,9 @@ class ScopeSelectionCancelled(PreflightError):
     """The human cancelled interactive scope setup before a review existed."""
 
 
+class PreReviewSetupError(PreflightError):
+    """Pre-review setup is incomplete, invalid, or cancelled."""
+
+
 class InternalCaptureError(PrePRVerifyError):
     """The capture contract or tool failed unexpectedly."""

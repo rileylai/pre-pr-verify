@@ -31,6 +31,7 @@ from pre_pr_verify.semantic_models import (
     SemanticReferenceSet,
     SemanticStatus,
     MAX_COMPARISONS,
+    MAX_COMPARISON_SOURCES,
     MAX_FINDINGS,
     MAX_LIMIT_GAPS,
     hash_payload,
@@ -55,8 +56,9 @@ _SPEC_CATEGORIES = {
 class SemanticLimitExceeded(ValueError):
     """A structured 1.5 artifact limit signal; no complete assessment exists."""
 
-    def __init__(self, gap: SemanticLimitGap) -> None:
+    def __init__(self, gap: SemanticLimitGap, values: Iterable[Any] = ()) -> None:
         self.gap = gap
+        self.values = tuple(values)
         super().__init__(
             f"semantic {gap.concern.value} limit exceeded at {gap.field}: "
             f"observed {gap.observed}, limit {gap.limit}"
@@ -150,7 +152,8 @@ def _bounded_collection(
                     len(bounded),
                     affected_axes,
                     bounded,
-                )
+                ),
+                bounded,
             )
     return bounded
 
@@ -279,10 +282,81 @@ def _reference_index(
     )
 
 
+def _requirement_comparison_limit_gap(
+    discovery: DiscoveryResult,
+    comparisons: list[RequirementComparison],
+) -> SemanticLimitGap | None:
+    """Bind a real comparison-record collection overflow to its retained input.
+
+    The comparison record bound is enforced by the producer collection itself.
+    This helper is intentionally driven by the retained records at that
+    boundary, not by the theoretical number of candidate pairs.  The retained
+    records and winning candidate IDs form the gap input identity so a caller
+    cannot substitute an unrelated generic overflow.
+    """
+
+    winning = sorted(discovery.requirement_resolution.candidate_source_ids)
+    if len(winning) <= 1 or len(winning) <= MAX_COMPARISON_SOURCES:
+        return None
+    if len(comparisons) != MAX_COMPARISONS:
+        return None
+
+    winning_set = set(winning)
+    covered_pairs: set[tuple[str, str]] = set()
+    for comparison in comparisons:
+        if not set(comparison.source_ids) <= winning_set:
+            return None
+        comparison_pairs = set(combinations(comparison.source_ids, 2))
+        if covered_pairs.intersection(comparison_pairs):
+            return None
+        covered_pairs.update(comparison_pairs)
+    if covered_pairs == set(combinations(winning, 2)):
+        return None
+
+    canonical_comparisons = [
+        comparison.model_dump(mode="json")
+        for comparison in sorted(
+            comparisons,
+            key=lambda value: tuple(value.source_ids),
+        )
+    ]
+    value = {
+        "winning_requirement_source_ids": winning,
+        "comparison_requirement": {
+            "representation": "bounded-record-collection",
+            "retained_comparison_identity": hash_payload(
+                {"comparisons": canonical_comparisons}
+            ),
+            "retained_comparison_count": len(canonical_comparisons),
+        },
+    }
+    return _limit_gap(
+        SemanticLimitConcern.SEMANTIC_COLLECTION,
+        "requirement_comparisons",
+        MAX_COMPARISONS,
+        MAX_COMPARISONS + 1,
+        [SemanticAxis.SPEC],
+        value,
+    )
+
+
 def _validate_requirement_completeness(
     discovery: DiscoveryResult,
     comparisons: list[RequirementComparison],
+    limit_gaps: list[SemanticLimitGap],
 ) -> None:
+    expected_limit_gap = _requirement_comparison_limit_gap(discovery, comparisons)
+    supplied_limit_gaps = [
+        gap
+        for gap in limit_gaps
+        if gap.field == "requirement_comparisons"
+        or gap.field.startswith("requirement_comparisons.")
+    ]
+    if supplied_limit_gaps != (
+        [expected_limit_gap] if expected_limit_gap is not None else []
+    ):
+        raise ValueError("requirement comparison limit gap does not match derived capacity")
+
     winning = sorted(discovery.requirement_resolution.candidate_source_ids)
     if len(winning) <= 1:
         if comparisons:
@@ -301,7 +375,11 @@ def _validate_requirement_completeness(
         covered_pairs.update(comparison_pairs)
     required_pairs = set(combinations(winning, 2))
     if not required_pairs <= covered_pairs:
+        if expected_limit_gap is not None:
+            return
         raise ValueError("semantic assessment omits a winning requirement comparison")
+    if expected_limit_gap is not None:
+        raise ValueError("complete requirement comparisons cannot carry a limit gap")
 
 
 def _validate_requirement_semantics(
@@ -405,15 +483,26 @@ def build_semantic_assessment(
         ),
         key=lambda finding: finding.finding_id,
     )
-    comparison_values = sorted(
-        _bounded_collection(
-            requirement_comparisons,
-            limit=MAX_COMPARISONS,
-            field="requirement_comparisons",
-            affected_axes=[SemanticAxis.SPEC],
-        ),
-        key=lambda comparison: tuple(comparison.source_ids),
-    )
+    try:
+        comparison_values = sorted(
+            _bounded_collection(
+                requirement_comparisons,
+                limit=MAX_COMPARISONS,
+                field="requirement_comparisons",
+                affected_axes=[SemanticAxis.SPEC],
+            ),
+            key=lambda comparison: tuple(comparison.source_ids),
+        )
+    except SemanticLimitExceeded as error:
+        retained = [
+            value
+            for value in error.values[:MAX_COMPARISONS]
+            if isinstance(value, RequirementComparison)
+        ]
+        derived_gap = _requirement_comparison_limit_gap(discovery, retained)
+        if derived_gap is None:
+            raise
+        raise SemanticLimitExceeded(derived_gap, error.values) from error
     gap_values = sorted(
         _bounded_collection(
             limit_gaps,
@@ -425,7 +514,7 @@ def build_semantic_assessment(
     )
 
     index = _reference_index(changeset, discovery, plan, evidence)
-    _validate_requirement_completeness(discovery, comparison_values)
+    _validate_requirement_completeness(discovery, comparison_values, gap_values)
 
     provisional = SemanticAssessment.model_construct(
         changeset_identity=changeset.identity,
@@ -563,7 +652,9 @@ def load_semantic_assessment(
                 ):
                     raise ValueError("confirmed impact finding lacks behavior evidence")
     _validate_requirement_completeness(
-        discovery, list(assessment.requirement_comparisons)
+        discovery,
+        list(assessment.requirement_comparisons),
+        list(assessment.limit_gaps),
     )
     _validate_requirement_semantics(discovery, assessment)
     return assessment

@@ -6,6 +6,14 @@ Preflight determines whether a readiness review can exist. Invalid invocation, a
 
 Once a non-empty review scope is established, a required evidence gap belongs to the review. A timeout, unavailable verifier, unavailable required execution capability, or unavailable material semantic evidence yields `INCONCLUSIVE` and exit code `2` unless a confirmed failure takes precedence.
 
+This includes a bounded semantic-collection failure while reconciling the
+complete winning requirement set. A `SemanticLimitGap` for requirement
+comparisons may account for mechanically incomplete pair coverage only when it
+affects Spec and records the real bounded overflow. It does not discard or
+select candidates, fabricate comparisons, or become a preflight/no-review
+failure. Spec remains `INCONCLUSIVE` with a required evidence gap; an
+independent confirmed blocker still takes final-verdict precedence.
+
 An empty ChangeSet is valid output from `capture`, but a full review stops with the no-review reason `nothing_to_review` and exit code `3`. No axes are marked `PASS`, and no `READY`, `NEEDS_CHANGES`, or `INCONCLUSIVE` readiness verdict is emitted. This extends code `3` to a valid-but-unreviewable scope; it does not classify the empty ChangeSet itself as invalid.
 
 ## Review modes

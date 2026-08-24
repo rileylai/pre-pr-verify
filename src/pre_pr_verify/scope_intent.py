@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -13,6 +15,9 @@ from pre_pr_verify.errors import (
     ScopeSelectionRequired,
 )
 from pre_pr_verify.git_capture import (
+    _RootedReader,
+    _index_entries,
+    _working_state,
     GitRunner,
     capture_changeset,
     resolve_repository_and_git_directory,
@@ -82,6 +87,68 @@ class ResolvedScope:
     selected_boundary: str
     review_focus: tuple[str, ...]
     materially_different_alternatives: bool
+
+
+def resolved_scope_identity(resolved: ResolvedScope) -> str:
+    """Return the immutable setup identity for the currently resolved scope.
+
+    This reuses the resolver's bounded Git metadata, including the working
+    path/status sets, rather than recapturing a ChangeSet.
+    """
+
+    runner = GitRunner(resolved.repository)
+    metadata = _scope_metadata(
+        runner,
+        resolved.base_ref,
+        resolved.expected_head_commit,
+    )
+    working_states: list[dict[str, str]] = []
+    if resolved.scope is ScopeMode.PENDING and metadata.working.paths:
+        _, git_directory = resolve_repository_and_git_directory(resolved.repository)
+        repository_reader = _RootedReader(resolved.repository, "scope identity")
+        git_reader = _RootedReader(git_directory, "scope identity Git metadata")
+        index_entries = _index_entries(runner)
+        for path in sorted(metadata.working.paths):
+            state = _working_state(
+                repository_reader,
+                path,
+                index_entries.get(path),
+                git_reader,
+            )
+            working_states.append(
+                {
+                    "path": path.hex(),
+                    "kind": state.kind.value,
+                    "mode": state.mode or "",
+                    "identity_kind": state.identity_kind.value,
+                    "content_identity": state.content_identity,
+                }
+            )
+    payload = {
+        "repository": str(resolved.repository),
+        "intent": resolved.intent.value,
+        "base_ref": resolved.base_ref,
+        "expected_head_commit": resolved.expected_head_commit,
+        "scope": resolved.scope.value,
+        "selected_boundary": resolved.selected_boundary,
+        "resolved_base_commit": metadata.resolved_base_commit,
+        "merge_base_commit": metadata.merge_base_commit,
+        "head_commit": metadata.head_commit,
+        "commit_count": metadata.commit_count,
+        "committed_paths": sorted(path.hex() for path in metadata.committed_paths),
+        "staged_paths": sorted(path.hex() for path in metadata.working.staged),
+        "unstaged_paths": sorted(path.hex() for path in metadata.working.unstaged),
+        "untracked_paths": sorted(path.hex() for path in metadata.working.untracked),
+        "working_states": working_states,
+    }
+    return hashlib.sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 @dataclass(frozen=True)

@@ -51,49 +51,21 @@ adjacent code, or contracts. V1 has no provider token policy and needs no API ke
 
 ## Pre-review setup interaction
 
-In a human-attached session, use this stable bounded numeric scope menu:
+Instantiate the deterministic core's `PreReviewSetup` coordinator and render
+its bounded `current_step()` choices. Follow the runbook for nested scope input,
+requirement candidates/criteria, and `ExecutionCapability` authorization.
+Repository declarations never authorize themselves, and acknowledging one
+source never removes equal-precedence candidates. Submit every answer through
+the coordinator, bind the resolved scope before capture, summarize
+Scope/Requirements/Verification, require `yes`, then call
+`require_ready_to_review(current_scope=resolved_scope)` before semantic review.
+The guard rejects stale repository/scope state. Cancellation creates no verdict.
+Headless use supplies every structured answer and never prompts, waits, guesses,
+or invents permission.
 
-1. Working changes — mark `Recommended` when recommended
-2. Current branch
-3. Since commit
-4. Custom
-
-Enter is valid only when a recommendation is displayed; it explicitly confirms
-that recommendation and never infers a scope. Current branch and Since commit
-use nested bounded choosers for bases and feature-start commits; Custom asks for
-the explicit SHA/ref. Invalid answers fail preflight after bounded retries.
-
-After capture and before semantic review, surface authoritative requirements:
-show the complete bounded winning candidate set and precedence, then offer
-numbered choices to accept a source, enter brief `ProvidedRequirement` criteria,
-continue without requirements, or cancel. The continue choice must warn that
-Spec remains `INCONCLUSIVE`. Source acknowledgement does not remove
-same-precedence candidates or alter precedence; implementation code, tests, and
-comments are never promoted merely to obtain `PASS`.
-
-Next, show discovered repository-native verification candidates, a bounded local
-plan, and its security profile. Offer:
-
-1. Explicitly authorize the proposed local checks
-2. Review without execution
-3. Customize authorization
-4. Cancel
-
-Repository declarations never authorize themselves. Map approval only through
-`ExecutionCapability`: a human may put a missing capability in `approved_gaps`
-only when trusted policy listed it in `approval_waivable`. Keep disposable
-snapshots, network off, and external services off unless trusted policy says
-otherwise. Review-without-execution retains its evidence gap and cannot pass.
-
-When setup resolves, summarize `Scope`, `Requirements`, and `Verification policy`,
-then ask one final explicit confirmation before canonical review starts; blank is
-not confirmation (type `yes` to confirm).
-
-Headless/automation mode never prompts or waits. It must receive the complete
-number-equivalent structured scope inputs, an explicit requirement decision (or
-an explicit missing-requirements decision), execution capability/configuration,
-and final confirmation. Missing inputs are preflight failures or structured
-evidence gaps under the existing contracts; never invent permissive defaults.
+If bounded semantic collection fails after a non-empty ChangeSet exists, keep
+its `SemanticLimitGap` as review evidence (`INCONCLUSIVE`/2 as required), never
+preflight/code 3; do not omit candidates or fabricate comparisons.
 
 ## Read details only when needed
 

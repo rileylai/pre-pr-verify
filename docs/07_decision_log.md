@@ -265,3 +265,27 @@ and explicit final confirmation; it never prompts or waits. Missing scope,
 requirements, or execution configuration remains a preflight failure or an
 existing evidence gap. This adds no schema, CLI, policy engine, provider/model
 management, V2, or V3 behavior.
+
+## ADR-029: Executable setup guard, post-scope semantic gaps, and installed identity
+
+**Status:** Accepted
+
+The documentation protocol is backed by a small deterministic
+`PreReviewSetup` coordinator. It exposes bounded numbered choice records,
+validates numeric/Enter input, owns only the five ordered setup phases plus
+cancellation, and rejects canonical review until final confirmation. Rendering,
+prompting, ChangeSet capture, requirement discovery, execution authorization,
+semantic judgment, and reduction remain with their existing owners.
+
+Once a non-empty ChangeSet exists, a real bounded requirement-reconciliation
+overflow is a structured `SemanticLimitGap`, not preflight/no-review. Only a
+Spec-affecting `requirement_comparisons...` collection gap can account for
+incomplete winning-candidate comparison coverage; it requires Spec
+`INCONCLUSIVE` and preserves all candidates. Existing reducer precedence remains
+unchanged.
+
+Installed verifier provenance uses a bounded deterministic SHA-256 over the
+installed Python core. It works in copied Skills and wheels without `.git`,
+does not inspect the target repository or claim an unavailable Git SHA, and is
+still supplied independently to ReviewArtifact construction/loading. This
+changes no versioned schema or verifier version.

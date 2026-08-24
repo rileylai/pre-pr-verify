@@ -58,6 +58,11 @@ consistency, full deterministic tests, and self-dogfood over the complete pendin
 ChangeSet. The repository checkout is the Skill distribution; built Python
 artifacts are the deterministic core distribution.
 
+The installed-core gate also obtains `installed_core_identity()` from the built
+wheel and from an isolated copied-Skill tree with no `.git`. The value must be
+stable for identical installed Python-core content and change when that content
+changes.
+
 The post-V1 setup usability gate also includes a fresh Skill forward-test in
 which a representative narrow local review is completed with numeric scope,
 requirement, and verification choices plus one explicit final confirmation.
@@ -87,7 +92,7 @@ last-known-good PrePR Verify
   -> review next candidate version
 ```
 
-For example, the released `v0.1.2` verifier can review the next working state. Running a new build against itself may provide comparison evidence but cannot be the only trusted gate.
+For example, the released `v0.1.3` verifier can review the next working state. Running a new build against itself may provide comparison evidence but cannot be the only trusted gate.
 
 The ReviewArtifact contract records explicit fields for:
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3 - 2026-08-24
+
+- Add deterministic numbered pre-review setup through scope, requirements,
+  verification authorization, final confirmation, and stale-scope checks.
+- Add truthful installed-core build identity for wheel and copied-Skill use,
+  with fail-closed headless behavior and release-readiness validation.
+- Preserve bounded requirement group semantics and report real persisted
+  comparison-collection overflow as an `INCONCLUSIVE` review evidence gap.
+
 ## 0.1.2 - 2026-08-24
 
 - Add stable numbered pre-review setup choices for scope, requirements,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import subprocess
+from itertools import combinations
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,7 @@ from pre_pr_verify.semantic_models import (
     SemanticAxisAssessment,
     SemanticFinding,
     SemanticLimitConcern,
+    SemanticLimitGap,
     SemanticStatus,
     MAX_AXIS_RATIONALE_CHARS,
     MAX_COMPARISONS,
@@ -630,6 +632,96 @@ def test_contradictory_candidates_cannot_be_spec_pass_without_reconciliation(
         build(scope, axes_value=axes(spec=SemanticStatus.PASS))
 
 
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"field": "requirement_comparisons.fake"},
+        {"limit": 1},
+        {"observed": 66},
+        {"affected_axes": [SemanticAxis.IMPACT]},
+        {"input_identity": "f" * 64},
+    ],
+)
+def test_requirement_limit_gap_fields_are_bound_to_winning_candidates(
+    tmp_path: Path,
+    updates: dict[str, object],
+) -> None:
+    scope = review_scope(
+        tmp_path,
+        explicit_specs=[
+            ProvidedRequirement("spec-a", "The API accepts integers."),
+            ProvidedRequirement("spec-b", "The API returns a string."),
+        ],
+    )
+    source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
+    comparison = RequirementComparison(
+        source_ids=source_ids,
+        relation=RequirementRelation.COMPLEMENTARY,
+        rationale="The representable winning candidates were reconciled.",
+    )
+    fake_gap = SemanticLimitGap(
+        concern=SemanticLimitConcern.SEMANTIC_COLLECTION,
+        field="requirement_comparisons",
+        limit=64,
+        observed=65,
+        affected_axes=[SemanticAxis.SPEC],
+        input_identity="a" * 64,
+    ).model_copy(update=updates)
+
+    gap_axes = [
+        axis.model_copy(
+            update={
+                "status": SemanticStatus.INCONCLUSIVE,
+                "required_evidence_gap": True,
+            }
+        )
+        for axis in axes()
+    ]
+    with pytest.raises(ValueError, match="requirement comparison limit gap"):
+        build(
+            scope,
+            axes_value=gap_axes,
+            comparisons=[comparison],
+            limit_gaps=[fake_gap],
+        )
+
+
+def test_fabricated_requirement_overflow_cannot_hide_a_contradiction(
+    tmp_path: Path,
+) -> None:
+    scope = review_scope(
+        tmp_path,
+        explicit_specs=[
+            ProvidedRequirement("spec-a", "The API accepts integers."),
+            ProvidedRequirement("spec-b", "The API accepts strings."),
+        ],
+    )
+    fake_gap = SemanticLimitGap(
+        concern=SemanticLimitConcern.SEMANTIC_COLLECTION,
+        field="requirement_comparisons",
+        limit=64,
+        observed=65,
+        affected_axes=[SemanticAxis.SPEC],
+        input_identity="b" * 64,
+    )
+
+    gap_axes = [
+        axis.model_copy(
+            update={
+                "status": SemanticStatus.INCONCLUSIVE,
+                "required_evidence_gap": True,
+            }
+        )
+        for axis in axes()
+    ]
+    with pytest.raises(ValueError, match="requirement comparison limit gap"):
+        build(
+            scope,
+            axes_value=gap_axes,
+            limit_gaps=[fake_gap],
+        )
+
+
 def test_semantic_text_and_collection_bounds() -> None:
     scope_ref = {
         "kind": "change_path",
@@ -1166,6 +1258,176 @@ def test_sixteen_sources_have_complete_single_group_coverage(tmp_path: Path) -> 
     )
     with pytest.raises(ValueError, match="overlap ambiguously"):
         build(scope, comparisons=[group, overlapping])
+
+
+def test_seventeen_sources_accept_group_and_pair_decomposition(tmp_path: Path) -> None:
+    scope = _comparison_scope(tmp_path, 17)
+    source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
+    comparisons = [
+        RequirementComparison(
+            source_ids=source_ids[:-1],
+            relation=RequirementRelation.COMPLEMENTARY,
+            rationale="The first sixteen winning candidates form one complete group.",
+        )
+    ]
+    comparisons.extend(
+        RequirementComparison(
+            source_ids=sorted((source_id, source_ids[-1])),
+            relation=RequirementRelation.COMPLEMENTARY,
+            rationale="The final winning candidate is reconciled with the group.",
+        )
+        for source_id in source_ids[:-1]
+    )
+
+    assessment = build(scope, comparisons=comparisons)
+
+    assert len(assessment.requirement_comparisons) == 17
+    assert assessment.limit_gaps == []
+    assert load_semantic_assessment(
+        assessment.model_dump(mode="json"), *scope
+    ) == assessment
+
+
+def test_representable_seventeen_sources_reject_fabricated_limit_gap(
+    tmp_path: Path,
+) -> None:
+    scope = _comparison_scope(tmp_path, 17)
+    source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
+    comparisons = [
+        RequirementComparison(
+            source_ids=source_ids[:-1],
+            relation=RequirementRelation.COMPLEMENTARY,
+            rationale="The first sixteen winning candidates form one complete group.",
+        )
+    ]
+    comparisons.extend(
+        RequirementComparison(
+            source_ids=sorted((source_id, source_ids[-1])),
+            relation=RequirementRelation.COMPLEMENTARY,
+            rationale="The final winning candidate is reconciled with the group.",
+        )
+        for source_id in source_ids[:-1]
+    )
+    fake_gap = SemanticLimitGap(
+        concern=SemanticLimitConcern.SEMANTIC_COLLECTION,
+        field="requirement_comparisons",
+        limit=MAX_COMPARISONS,
+        observed=MAX_COMPARISONS + 1,
+        affected_axes=[SemanticAxis.SPEC],
+        input_identity="c" * 64,
+    )
+    gap_axes = [
+        axis.model_copy(
+            update={
+                "status": SemanticStatus.INCONCLUSIVE,
+                "required_evidence_gap": True,
+            }
+        )
+        for axis in axes()
+    ]
+
+    with pytest.raises(ValueError, match="requirement comparison limit gap"):
+        build(
+            scope,
+            axes_value=gap_axes,
+            comparisons=comparisons,
+            limit_gaps=[fake_gap],
+        )
+
+
+def test_complete_seventeen_source_decomposition_at_record_limit_is_valid(
+    tmp_path: Path,
+) -> None:
+    scope = _comparison_scope(tmp_path, 17)
+    source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
+    groups = [
+        tuple(source_ids[:12]),
+        (source_ids[11], source_ids[12], source_ids[13], source_ids[14]),
+        (source_ids[10], source_ids[14], source_ids[16]),
+    ]
+    grouped_pairs = {
+        tuple(sorted(pair))
+        for group in groups
+        for pair in combinations(group, 2)
+    }
+    comparisons = [
+        RequirementComparison(
+            source_ids=list(group),
+            relation=RequirementRelation.COMPLEMENTARY,
+            rationale="This group jointly reconciles its winning candidates.",
+        )
+        for group in groups
+    ]
+    comparisons.extend(
+        RequirementComparison(
+            source_ids=list(pair),
+            relation=RequirementRelation.COMPLEMENTARY,
+            rationale="This remaining winning pair was reconciled.",
+        )
+        for pair in combinations(source_ids, 2)
+        if pair not in grouped_pairs
+    )
+    assert len(comparisons) == MAX_COMPARISONS
+
+    assessment = build(scope, comparisons=comparisons)
+
+    assert assessment.limit_gaps == []
+    assert len(assessment.requirement_comparisons) == MAX_COMPARISONS
+
+
+def test_real_comparison_record_overflow_retains_boundary_and_gap_binding(
+    tmp_path: Path,
+) -> None:
+    scope = _comparison_scope(tmp_path, 34)
+    source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
+    attempted = [
+        RequirementComparison(
+            source_ids=list(pair),
+            relation=RequirementRelation.COMPLEMENTARY,
+            rationale="A bounded comparison record was attempted.",
+        )
+        for pair in combinations(source_ids, 2)
+    ][: MAX_COMPARISONS + 1]
+
+    with pytest.raises(SemanticLimitExceeded) as overflow:
+        build(scope, comparisons=attempted)
+
+    assert overflow.value.gap.field == "requirement_comparisons"
+    assert overflow.value.gap.limit == MAX_COMPARISONS
+    assert overflow.value.gap.observed == MAX_COMPARISONS + 1
+    assert overflow.value.gap.affected_axes == [SemanticAxis.SPEC]
+    retained = list(overflow.value.values[:MAX_COMPARISONS])
+    assert len(retained) == MAX_COMPARISONS
+    assert all(isinstance(item, RequirementComparison) for item in retained)
+
+    gap_axes = [
+        axis.model_copy(
+            update={
+                "status": SemanticStatus.INCONCLUSIVE,
+                "required_evidence_gap": True,
+            }
+        )
+        if axis.axis is SemanticAxis.SPEC
+        else axis
+        for axis in axes()
+    ]
+    assessment = build(
+        scope,
+        axes_value=gap_axes,
+        comparisons=retained,
+        limit_gaps=[overflow.value.gap],
+    )
+
+    assert len(assessment.requirement_comparisons) == MAX_COMPARISONS
+    assert assessment.limit_gaps == [overflow.value.gap]
+
+    forged_payload = assessment.model_dump(mode="json")
+    forged_payload["limit_gaps"][0]["input_identity"] = "d" * 64
+    forged_payload["identity"] = hash_payload(
+        {key: value for key, value in forged_payload.items() if key != "identity"}
+    )
+    with pytest.raises(ValueError, match="requirement comparison limit gap"):
+        load_semantic_assessment(forged_payload, *scope)
 
 
 def test_exactly_sixty_four_nonoverlapping_comparisons_are_valid(

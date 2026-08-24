@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from itertools import combinations
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,11 @@ from pre_pr_verify.review import (
     verdict_exit_code,
 )
 from pre_pr_verify.review_models import ReviewArtifact, ReviewVerdict, hash_payload
-from pre_pr_verify.semantic import bind_semantic_reference, build_semantic_assessment
+from pre_pr_verify.semantic import (
+    SemanticLimitExceeded,
+    bind_semantic_reference,
+    build_semantic_assessment,
+)
 from pre_pr_verify.semantic_models import (
     EvidenceReferenceKind,
     FindingCategory,
@@ -29,7 +34,9 @@ from pre_pr_verify.semantic_models import (
     SemanticAxis,
     SemanticAxisAssessment,
     SemanticFinding,
+    SemanticLimitConcern,
     SemanticStatus,
+    MAX_COMPARISONS,
 )
 from pre_pr_verify.verification import build_verification_plan, discover_canonical_checks
 from pre_pr_verify.verification_models import (
@@ -366,6 +373,61 @@ def test_semantic_contradiction_is_inconclusive(tmp_path: Path) -> None:
         ),
     )
     assert artifact.verdict is ReviewVerdict.INCONCLUSIVE
+
+
+def test_nonempty_thirty_four_requirement_limit_is_review_level_inconclusive(
+    tmp_path: Path,
+) -> None:
+    specs = [
+        ProvidedRequirement(f"requirement-{index}", f"Criterion {index} must hold.")
+        for index in range(34)
+    ]
+    scope = deterministic_scope(repository(tmp_path), explicit_specs=specs)
+    source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
+    assert scope[0].empty is False
+    assert len(source_ids) == 34
+
+    attempted = [
+        RequirementComparison(
+            source_ids=list(pair),
+            relation=RequirementRelation.COMPLEMENTARY,
+            rationale=f"Attempted reconciliation {index}.",
+        )
+        for index, pair in enumerate(combinations(source_ids, 2))
+    ][: MAX_COMPARISONS + 1]
+    with pytest.raises(SemanticLimitExceeded) as overflow:
+        build_semantic_assessment(
+            *scope,
+            axes=axes(),
+            requirement_comparisons=attempted,
+    )
+    assert overflow.value.gap.concern is SemanticLimitConcern.SEMANTIC_COLLECTION
+    assert overflow.value.gap.field == "requirement_comparisons"
+    assert overflow.value.gap.limit == 64
+    assert overflow.value.gap.observed == MAX_COMPARISONS + 1
+    assert overflow.value.gap.affected_axes == [SemanticAxis.SPEC]
+    retained = list(overflow.value.values[:MAX_COMPARISONS])
+    assert len(retained) == MAX_COMPARISONS
+    assert all(isinstance(item, RequirementComparison) for item in retained)
+
+    assessment = build_semantic_assessment(
+        *scope,
+        axes=axes(
+            statuses={SemanticAxis.SPEC: SemanticStatus.INCONCLUSIVE},
+            gaps={SemanticAxis.SPEC},
+        ),
+        requirement_comparisons=retained,
+        limit_gaps=[overflow.value.gap],
+    )
+    artifact = build_review_artifact(
+        *scope,
+        assessment,
+        verifier_version=VERIFIER_VERSION,
+        verifier_commit_or_build=VERIFIER_BUILD,
+    )
+
+    assert artifact.verdict is ReviewVerdict.INCONCLUSIVE
+    assert verdict_exit_code(artifact.verdict) == 2
 
 
 def test_missing_requirements_are_inconclusive(tmp_path: Path) -> None:
