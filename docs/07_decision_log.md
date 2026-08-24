@@ -181,3 +181,22 @@ engine, language analysis, or V2/V3 integration.
 The default renderer applies its own smaller presentation selection, reports
 omitted counts and stable identities, and escapes untrusted prose onto one line
 so semantic text cannot forge headings or verdict text.
+
+## ADR-025: V1 release distribution and acceptance boundary
+
+**Status:** Accepted
+
+The repository checkout is the Codex Skill distribution: root `SKILL.md` is the
+concise entrypoint and routes progressively to the exact canonical API sequence
+in `docs/09_v1_skill_runbook.md`, then to stage-specific numbered contracts,
+checked-in schemas, and the locked Python project. The wheel and sdist distribute the
+deterministic Python core; they do not pretend to be a standalone semantic
+reviewer. Full review invocation remains through the Skill, while the public CLI
+continues to expose deterministic capture only.
+
+Milestone 1.7 proves the frozen V1 chain with real-repository deterministic
+acceptance fixtures, clean package installation/import, schema and Skill
+validation, documentation consistency, self-dogfood, and a fresh independent
+Skill/release review. The semantic forward-test uses the available Codex Skill
+context and fixed safety rubric; it adds no provider API keys, token accounting,
+runtime orchestration, network dependency, or V2/V3 behavior.

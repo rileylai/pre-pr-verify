@@ -1,5 +1,26 @@
 # PrePR Verify Agent Guide
 
+## When to use
+
+Use PrePR Verify for a fresh, independent review of a local repository's complete
+pending change before opening a pull request. V1 requires an explicit repository
+and base ref and is a read-only local reviewer; it does not author fixes or
+publish to GitHub.
+
+## V1 contract at a glance
+
+The frozen flow is ChangeSet → discovery → VerificationPlan → isolated execution
+evidence → five-axis SemanticAssessment → deterministic ReviewArtifact reduction
+→ concise report. Semantic judgment proposes evidence-backed findings; the core
+owns artifact binding, axis status, final verdict, and exit mapping.
+
+- `READY`: all five axes pass and all required evidence is complete.
+- `NEEDS_CHANGES`: canonical evidence confirms a blocking defect.
+- `INCONCLUSIVE`: required evidence or confidence is insufficient.
+- Preflight/`nothing_to_review`: no review verdict exists.
+
+Load deeper numbered docs only for the stage being inspected.
+
 ## Hard invariants
 
 - V1 is a non-authoring reviewer. Never modify the author's source tree, commit, push, merge, or silently remediate findings.
@@ -22,4 +43,7 @@
 - Read `docs/06_versioned_integrations.md` before work involving GitHub MCP, triggers, or inline comments.
 - Record contract and boundary decisions in `docs/07_decision_log.md`.
 - Read `docs/08_development_validation_and_self_hosting.md` before changing milestone gates, dogfooding, release evidence, or self-hosting policy.
-- At session start, read the Current Pointer in `dev_state/PROJECT_ROADMAP.md` and the latest entry in `dev_state/DAILY_LOG.md`.
+- Read `docs/09_v1_skill_runbook.md` when invoking or changing the complete local V1 review lifecycle.
+- During repository development, if local `dev_state/` is present, read the
+  Current Pointer in `PROJECT_ROADMAP.md` and latest `DAILY_LOG.md` entry.
+  Installed Skill use does not depend on this ignored engineering state.

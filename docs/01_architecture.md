@@ -85,4 +85,8 @@ V1 is a non-authoring reviewer. It may create caches and build artifacts only in
 
 ## Progressive disclosure
 
-`AGENTS.md` contains only navigation and hard invariants. Detailed contracts live in task-specific numbered documents. No future-version module or empty abstraction is created merely to mirror a planned architecture.
+`SKILL.md` contains the user-facing V1 workflow and routes to relevant contracts.
+`AGENTS.md` adds repository-development invariants and the same concise verdict
+boundary. Detailed contracts live in task-specific numbered documents and are
+read only when their stage is active. No future-version module or empty
+abstraction is created merely to mirror a planned architecture.

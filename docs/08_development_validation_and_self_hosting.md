@@ -44,6 +44,20 @@ After 1.6, a fresh Codex session can run a genuine local V1 dogfood review of th
 
 Milestone 1.7 adds the deterministic acceptance suite, security fixtures, READY/NEEDS_CHANGES/INCONCLUSIVE fixtures, model-evaluation verdict-safety hard gates, and self-hosting validation. Only after these gates pass and V1 is released may a last-known-good V1 verifier serve as the required pre-PR gate for V2/V3 development.
 
+For the V1 release candidate, model-evaluation evidence is a fresh independent
+Codex Skill forward-test against realistic local-review requests and the fixed
+verdict-safety acceptance rubric. It is not a provider runtime, API-key-based
+test harness, token counter, or orchestration framework. Deterministic fixtures
+remain the reproducible hard gates; the independent Skill review supplies the
+separate semantic/bootstrap evidence.
+
+Release acceptance also requires a locked clean sync, sdist/wheel build,
+installation and import from the built wheel in a disposable environment,
+checked-in schema availability, root Skill validation, documentation/limitation
+consistency, full deterministic tests, and self-dogfood over the complete pending
+ChangeSet. The repository checkout is the Skill distribution; built Python
+artifacts are the deterministic core distribution.
+
 ## Bootstrap and circular trust
 
 An unreleased candidate cannot establish its own trust merely by reviewing itself and returning `READY`. Before the first V1 release, candidate self-review is additional dogfood evidence only.
@@ -68,13 +82,14 @@ last-known-good PrePR Verify
 
 For example, a released v1.0.0 verifier reviews the v1.1 working state. Running the candidate against itself may provide comparison evidence but cannot be the only trusted gate.
 
-The future ReviewArtifact contract must record or reserve explicit fields for:
+The ReviewArtifact contract records explicit fields for:
 
 - verifier version;
 - verifier commit or build identity;
 - target ChangeSet or snapshot identity.
 
-These fields are architecture requirements for milestone 1.6, not Foundation placeholders or current implementation.
+These fields are validated release evidence, not self-asserted serialized
+provenance.
 
 ## Development stage gates
 
