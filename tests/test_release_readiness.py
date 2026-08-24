@@ -87,7 +87,10 @@ def test_skill_runbook_routes_every_canonical_stage_and_policy_boundary() -> Non
     assert "approved_gaps" in runbook and "explicit" in runbook
     assert "reporting failure" in runbook.lower()
     assert "uv run python" in runbook
-    assert "conservatively require all four" in runbook
+    assert "required_capabilities = (CapabilityName.OUTPUT_LIMITS,)" in runbook
+    assert "Do not infer optional requirements" in runbook
+    assert "complete `CapabilityName`" in runbook
+    assert "conservatively require all four" not in runbook
     assert "core-sha256" in runbook or "installed_core_identity" in runbook
     assert "recommend != infer" in runbook
     assert "interactive=False" in runbook
@@ -143,7 +146,7 @@ def test_runtime_has_no_developer_path_or_provider_key_dependency() -> None:
 def test_current_version_and_documented_boundaries() -> None:
     readme = Path("README.md").read_text()
 
-    assert __version__ == "0.1.3"
+    assert __version__ == "0.1.4"
     assert Path(".python-version").read_text().strip() == "3.12.13"
     assert "Semantic review, ReviewArtifact reduction/reporting, and GitHub integration remain unimplemented" not in readme
     assert "No `.env`" in readme

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 - 2026-08-25
+
+- Require only bounded output for ordinary local verification commands by
+  default; request optional isolation capabilities only through trusted policy.
+- Preserve fail-closed capability and explicit approval behavior for requested
+  unavailable capabilities.
+
 ## 0.1.3 - 2026-08-24
 
 - Add deterministic numbered pre-review setup through scope, requirements,

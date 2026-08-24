@@ -97,7 +97,7 @@ To validate the built core independently of the source checkout:
 ```sh
 uv venv /tmp/pre-pr-verify-install
 uv pip install --python /tmp/pre-pr-verify-install/bin/python \
-  dist/pre_pr_verify-0.1.3-py3-none-any.whl
+  dist/pre_pr_verify-0.1.4-py3-none-any.whl
 /tmp/pre-pr-verify-install/bin/python -c \
   "import pre_pr_verify; print(pre_pr_verify.__version__)"
 ```

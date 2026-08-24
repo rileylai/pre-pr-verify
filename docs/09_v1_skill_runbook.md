@@ -254,14 +254,19 @@ different value:
   complete comparisons, and missing requirements require the frozen Spec gap.
 
 `required_capabilities` comes only from trusted host/invocation policy, never
-from the author repository. `CapabilityName.OUTPUT_LIMITS` is always required.
-When no trusted execution policy exists, conservatively require all four
-`CapabilityName` values. The plain adapter reports only `OUTPUT_LIMITS`, so the
-remaining requirements produce truthful `NOT_RUN` capability gaps and an
-`INCONCLUSIVE` review; it must not guess permission and run. A human may approve
-a specific missing capability only when trusted policy first lists it in
-`approval_waivable`. Put the approved name in `approved_gaps`; otherwise leave
-both lists empty.
+from the author repository. For an ordinary local command, use:
+
+```python
+required_capabilities = (CapabilityName.OUTPUT_LIMITS,)
+```
+
+Add `NETWORK_ISOLATION`, `RESOURCE_LIMITS`, or `PROCESS_ISOLATION` only when a
+trusted execution policy explicitly requires that capability for the command or
+review. Do not infer optional requirements from the complete `CapabilityName`
+enum. If trusted policy requires an unavailable capability, the command remains
+blocked unless that specific gap is first listed in `approval_waivable` and the
+human explicitly approves it through `approved_gaps`; approval never makes the
+capability available or waives a non-waivable invariant.
 
 `verifier_build` identifies the installed PrePR Verify core, not the author
 repository. Normal released/copied Skill and wheel installations use

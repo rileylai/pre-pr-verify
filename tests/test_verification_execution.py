@@ -113,6 +113,71 @@ def request(*argv: str, **overrides: object) -> ExecutionRequest:
     return ExecutionRequest(**values)
 
 
+OPTIONAL_CAPABILITIES = (
+    CapabilityName.NETWORK_ISOLATION,
+    CapabilityName.RESOURCE_LIMITS,
+    CapabilityName.PROCESS_ISOLATION,
+)
+
+
+def test_ordinary_required_command_runs_with_only_output_limits(
+    tmp_path: Path,
+) -> None:
+    result = execute_request(
+        request(sys.executable, "-c", "print('ordinary local check')"),
+        capability(),
+        tmp_path,
+    )
+
+    assert result.request.required_capabilities == [CapabilityName.OUTPUT_LIMITS]
+    assert result.status is ExecutionStatus.PASSED
+    assert result.failure_kind is None
+    assert result.required_evidence_gap is False
+
+
+@pytest.mark.parametrize("optional_capability", OPTIONAL_CAPABILITIES)
+def test_unrequested_optional_capability_does_not_block_execution(
+    tmp_path: Path, optional_capability: CapabilityName
+) -> None:
+    result = execute_request(
+        request(
+            sys.executable,
+            "-c",
+            "pass",
+            required_capabilities=[CapabilityName.OUTPUT_LIMITS],
+        ),
+        capability(),
+        tmp_path,
+    )
+
+    assert optional_capability not in result.request.required_capabilities
+    assert optional_capability not in result.decision.missing_capabilities
+    assert result.status is ExecutionStatus.PASSED
+
+
+@pytest.mark.parametrize("required_capability", OPTIONAL_CAPABILITIES)
+def test_explicitly_required_unavailable_capability_fails_closed(
+    tmp_path: Path, required_capability: CapabilityName
+) -> None:
+    marker = tmp_path / f"{required_capability.value}-must-not-run"
+    result = execute_request(
+        request(
+            sys.executable,
+            "-c",
+            f"from pathlib import Path; Path({str(marker)!r}).write_text('ran')",
+            required_capabilities=[CapabilityName.OUTPUT_LIMITS, required_capability],
+        ),
+        capability(),
+        tmp_path,
+    )
+
+    assert result.status is ExecutionStatus.NOT_RUN
+    assert result.failure_kind is FailureKind.CAPABILITY
+    assert result.required_evidence_gap is True
+    assert result.decision.missing_capabilities == [required_capability]
+    assert not marker.exists()
+
+
 def test_execution_permission_and_capability_decisions() -> None:
     executable = decide_execution(request(sys.executable, "-c", "pass"), capability())
     cannot = decide_execution(
@@ -154,22 +219,33 @@ def test_required_nonwaivable_safety_gap_never_starts_process(tmp_path: Path) ->
     assert not marker.exists()
 
 
-def test_approval_waivable_gap_executes_only_after_specific_approval() -> None:
+@pytest.mark.parametrize("optional_capability", OPTIONAL_CAPABILITIES)
+def test_approval_waivable_gap_executes_only_after_specific_approval(
+    tmp_path: Path, optional_capability: CapabilityName
+) -> None:
     execution_request = request(
         sys.executable,
         "-c",
         "pass",
-        required_capabilities={CapabilityName.NETWORK_ISOLATION},
+        required_capabilities={CapabilityName.OUTPUT_LIMITS, optional_capability},
     )
+    awaiting_approval = execute_request(
+        execution_request,
+        capability(approval_waivable={optional_capability}),
+        tmp_path,
+    )
+    assert awaiting_approval.status is ExecutionStatus.NOT_RUN
+    assert awaiting_approval.failure_kind is FailureKind.PERMISSION
+
     approved = capability(
-        approval_waivable={CapabilityName.NETWORK_ISOLATION},
-        approved_gaps={CapabilityName.NETWORK_ISOLATION},
+        approval_waivable={optional_capability},
+        approved_gaps={optional_capability},
     )
+    result = execute_request(execution_request, approved, tmp_path)
 
-    decision = decide_execution(execution_request, approved)
-
-    assert decision.kind is DecisionKind.EXECUTABLE
-    assert decision.accepted_risks == [CapabilityName.NETWORK_ISOLATION]
+    assert result.decision.kind is DecisionKind.EXECUTABLE
+    assert result.decision.accepted_risks == [optional_capability]
+    assert result.status is ExecutionStatus.PASSED
 
 
 def test_timeout_nonzero_and_infrastructure_are_distinct(tmp_path: Path) -> None:
