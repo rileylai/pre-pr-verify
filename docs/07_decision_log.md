@@ -241,3 +241,27 @@ resolution remains SHA-pinned. When working changes exist and the first
 plausible branch candidate exceeds the existing large commit/path threshold
 with a broader path set, recommendation favors working changes without selecting
 it; no scoring engine or reducer rule is introduced.
+
+## ADR-028: Numbered pre-review setup above frozen V1 contracts
+
+**Status:** Accepted
+
+The next Skill usability patch keeps interaction in the orchestration/runbook
+layer. Human-attached setup uses stable numbered scope choices, a nested bounded
+base/feature-start chooser, an explicit requirements decision, an explicit
+verification authorization decision, and one final confirmation. Enter accepts
+only a displayed recommendation and therefore remains an explicit human action.
+
+Requirement-source acknowledgement does not promote repository prose, remove
+same-precedence candidates, or alter the frozen precedence/comparison rules.
+Repository-native verification declarations remain candidates and never grant
+execution permission. Human approval is materialized only through the existing
+trusted `ExecutionCapability` / `approval_waivable` / `approved_gaps` inputs;
+non-waivable invariants and reducer semantics are unchanged.
+
+Interactive setup defaults to disposable snapshots, network off, and external
+services off. Headless mode receives the numeric-equivalent structured choices
+and explicit final confirmation; it never prompts or waits. Missing scope,
+requirements, or execution configuration remains a preflight failure or an
+existing evidence gap. This adds no schema, CLI, policy engine, provider/model
+management, V2, or V3 behavior.

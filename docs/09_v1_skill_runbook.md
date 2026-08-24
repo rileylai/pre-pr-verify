@@ -118,13 +118,95 @@ The reviewer may inspect any relevant callers, tests, adjacent code, and
 contracts within the selected review, and readiness remains bound to the full
 ChangeSet.
 
-The setup surface reserves read-only display slots for a later patch to show
-(a) the discovered authoritative requirement/spec candidate set and its
-precedence state after canonical discovery and (b) the trusted execution policy
-origin, digest/identity where applicable, required capabilities, and waivable
-gaps. Do not cache repository prose as authority, auto-select competing
-requirements, or convert discovered commands into execution permission. This
-patch adds no new requirement or execution-authority channel.
+### Numbered interactive setup
+
+The Skill's human-facing setup uses stable numeric choices rather than asking
+the user to repeat scope labels. Display this top-level menu in this order:
+
+```text
+1. Working changes                 Recommended (when recommended)
+2. Current branch
+3. Since commit
+4. Custom
+```
+
+The user may answer `1`, `2`, `3`, or `4`. If a recommendation is displayed,
+Enter is also valid and means explicit human confirmation of that recommendation;
+it is not inference. A blank answer without a recommendation is invalid. For
+`Current branch`, display a second bounded numbered menu from
+`options.base_candidates` and pass only the selected candidate to
+`resolve_scope_selection`. Do not flatten base candidates into the top-level
+menu. `Since commit` gets the same treatment from `recent_commits`; `Custom`
+still requires its explicit SHA/ref text. Re-prompt invalid answers only within
+a bounded attempt count, then raise `PreflightError`.
+
+The scope choice and any required advisory action are explicit before calling
+`capture_resolved_scope`. Preserve the existing metadata-only preview and
+advisory semantics. A recommendation, candidate ordering, or advisory never
+changes the ChangeSet boundary.
+
+### Requirement setup
+
+After scope confirmation and capture, but before semantic inspection, call
+`discover_review_sources` and show its authoritative winning requirement
+candidate set and precedence in a bounded numbered chooser. The actions are:
+
+1. accept one discovered winning source for inspection;
+2. enter brief explicit acceptance criteria;
+3. continue without authoritative requirements, with a visible warning that
+   Spec will remain `INCONCLUSIVE`;
+4. cancel.
+
+If there are multiple winning candidates, accepting one is a UI acknowledgement,
+not a replacement of the candidate set or a precedence change. Semantic review
+must still compare every winning candidate as required by the frozen contract.
+Explicit criteria are passed as `ProvidedRequirement` and discovery is reloaded
+at explicit precedence. Do not infer requirements from implementation code,
+tests, or comments merely to obtain `PASS`. A candidate set that cannot be
+displayed within the bounded setup limit must not be silently truncated; offer
+explicit criteria, an explicit missing-requirements decision, or cancel.
+
+### Verification authorization setup
+
+Discover repository-native commands with `discover_canonical_checks` and show
+the bounded local `VerificationPlan` plus its security profile. Repository
+content supplies candidate commands and provenance only; it never supplies
+execution authority. Offer:
+
+1. explicitly authorize the proposed local checks;
+2. review without execution;
+3. customize authorization;
+4. cancel.
+
+Materialize approval only through the existing `ExecutionCapability` input.
+`approved_gaps` may contain a missing capability only when trusted policy first
+listed it in `approval_waivable` and the human explicitly approved it. Custom
+authorization may select only those disclosed, policy-waivable gaps; it cannot
+make a capability `available` or waive a non-waivable invariant. Review without
+execution leaves command evidence absent/not-run and therefore preserves the
+existing `INCONCLUSIVE` path. The default profile is disposable snapshots,
+network off, and external services off unless an explicit trusted policy
+authorizes otherwise.
+
+### Final confirmation and headless mode
+
+When the three setup areas resolve, summarize exactly `Scope`, `Requirements`,
+and `Verification policy`, then require one final affirmative confirmation
+before canonical review starts. Blank is not confirmation; cancellation stops
+before semantic review.
+
+For a narrow LearnLoop-shaped flow with a working-scope recommendation and one
+discovered requirement source, the normal answers are `1` (scope), `1`
+(requirement), `1` (verification authorization), then `yes`.
+
+With `interactive=False`, never call an input function or wait. Require the
+structured equivalents of the scope choice/base, requirement decision, and
+verification authorization, plus explicit final confirmation. Missing scope is
+a preflight failure. Missing requirement input remains a preflight failure when
+required; an explicit continue-without decision is instead the existing Spec
+evidence gap. Missing execution configuration remains an explicit capability or
+evidence gap. Do not invent a default branch, requirement, approval, or
+execution permission.
 
 ## Launch and input defaults
 

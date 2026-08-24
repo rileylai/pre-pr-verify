@@ -65,6 +65,17 @@ Skill never silently selects working changes, `main`, or any other boundary.
 Automation must provide the repository and complete explicit scope/config; if
 anything is missing it fails preflight without prompting or waiting.
 
+The human setup uses stable numeric choices: working changes, current branch,
+since commit, or custom. Current-branch bases and feature-start commits use
+bounded nested choosers, and Enter accepts only a displayed recommendation as
+an explicit confirmation. Before semantic review, the Skill presents the
+authoritative requirement candidates and a numbered choice to accept a source,
+enter brief criteria, or continue with an explicit Spec `INCONCLUSIVE` warning.
+It then presents the local verification plan and security profile for explicit
+authorization, review without execution, customization, or cancellation, and
+ends with one final confirmation. Repository requirements remain evidence, and
+repository commands never grant execution authority.
+
 The root `SKILL.md` is the full-review entrypoint. It orchestrates the canonical
 Python builders/loaders for ChangeSet, discovery, planning/execution,
 SemanticAssessment, ReviewArtifact, report, and exit semantics. The standalone

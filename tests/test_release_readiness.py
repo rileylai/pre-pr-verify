@@ -92,6 +92,41 @@ def test_skill_runbook_routes_every_canonical_stage_and_policy_boundary() -> Non
     assert "review_focus" in runbook
 
 
+def test_numeric_setup_forward_path_covers_learnloop_shaped_interaction() -> None:
+    skill = Path("SKILL.md").read_text()
+    runbook = Path("docs/09_v1_skill_runbook.md").read_text()
+    combined = f"{skill}\n{runbook}"
+
+    # A normal narrow dogfood can be completed with numeric setup choices and
+    # one final affirmative confirmation, rather than copied scope labels.
+    learnloop_answers = ("1", "1", "1", "yes")
+    assert all(answer in combined for answer in learnloop_answers)
+    assert "1. Working changes" in combined
+    assert "2. Current branch" in combined
+    assert "3. Since commit" in combined
+    assert "4. Custom" in combined
+    assert "second bounded numbered menu" in combined
+    assert "Enter is also valid" in combined
+
+    requirement_section = runbook[runbook.index("### Requirement setup") :]
+    verification_section = runbook[runbook.index("### Verification authorization setup") :]
+    assert "accept one discovered winning source" in requirement_section
+    assert "explicit acceptance criteria" in requirement_section
+    assert "Spec will remain `INCONCLUSIVE`" in requirement_section
+    assert "implementation code" in requirement_section
+    assert "1. explicitly authorize the proposed local checks" in verification_section
+    assert "2. review without execution" in verification_section
+    assert "3. customize authorization" in verification_section
+    assert "approved_gaps" in verification_section
+    assert "approval_waivable" in verification_section
+    assert "network off" in verification_section
+    assert "external services off" in verification_section
+    assert "summarize" in verification_section
+    assert "interactive=False" in verification_section
+    assert "never call an input function or wait" in verification_section
+    assert "later patch" not in runbook
+
+
 def test_runtime_has_no_developer_path_or_provider_key_dependency() -> None:
     runtime = "\n".join(
         path.read_text() for path in sorted(Path("src/pre_pr_verify").glob("*.py"))

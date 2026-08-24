@@ -58,6 +58,13 @@ consistency, full deterministic tests, and self-dogfood over the complete pendin
 ChangeSet. The repository checkout is the Skill distribution; built Python
 artifacts are the deterministic core distribution.
 
+The post-V1 setup usability gate also includes a fresh Skill forward-test in
+which a narrow LearnLoop-shaped review is completed with numeric scope,
+requirement, and verification choices plus one explicit final confirmation.
+The test must prove that source acknowledgement does not alter requirement
+precedence, repository commands do not grant execution authority, and headless
+setup never prompts or invents missing inputs.
+
 ## Bootstrap and circular trust
 
 An unreleased candidate cannot establish its own trust merely by reviewing itself and returning `READY`. Before the first V1 release, candidate self-review is additional dogfood evidence only.
