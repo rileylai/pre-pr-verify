@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 - 2026-08-24
+
+- Add stable numbered pre-review setup choices for scope, requirements,
+  verification authorization, and final confirmation in human-attached
+  sessions.
+- Keep setup metadata-only until explicit confirmation and require complete
+  structured inputs for headless use, preserving the existing scope,
+  authority, and verdict boundaries.
+
 ## 0.1.1 - 2026-08-24
 
 - Reject ambiguous custom ref names and non-commit ref targets while preserving

@@ -34,13 +34,13 @@ change captured for the selected comparison.
 
 `committed-only` excludes staged, unstaged, and untracked changes. Ignored files are excluded unless explicitly included by the user, and `.git/` is always excluded.
 
-The frozen milestone 1.2 CLI does not add an include flag. An embedding caller may pass explicitly approved ignored paths through the core capture API; these paths remain byte-validated, repository-bounded, and unable to enter `.git/`. `committed-only` rejects explicit includes.
+The capture CLI does not add an include flag. An embedding caller may pass explicitly approved ignored paths through the core capture API; these paths remain byte-validated, repository-bounded, and unable to enter `.git/`. `committed-only` rejects explicit includes.
 
 Explicit includes are part of the ChangeSet contract, not transient capture arguments. The canonical sorted `RawPath` list is serialized and included in the ChangeSet identity. Any later snapshot consistency recapture reuses that exact list, so an ignored file explicitly approved for the captured scope remains materializable and verifiable.
 
 ## Layered state
 
-A logical file change preserves base, HEAD, index, working, and effective states plus every applicable origin. A path may therefore have multiple origins. Committed and staged rename detection uses fixed Git object comparison (`-M50%`, Myers algorithm, bounded candidate set). Working-tree rename detection is limited to an unambiguous exact-content match and never invokes conversion filters. Copies are not inferred in milestone 1.2.
+A logical file change preserves base, HEAD, index, working, and effective states plus every applicable origin. A path may therefore have multiple origins. Committed and staged rename detection uses fixed Git object comparison (`-M50%`, Myers algorithm, bounded candidate set). Working-tree rename detection is limited to an unambiguous exact-content match and never invokes conversion filters. Copies are not inferred by the capture contract.
 
 File state includes path, presence, kind, executable/mode information, size, and content identity. Regular and binary content uses SHA-256 of exact bytes; symlinks hash link-target bytes without following them; gitlinks use commit identity; deletion uses an explicit absence marker.
 
@@ -56,9 +56,9 @@ Symlinks are never followed, including symlinks in intermediate directory compon
 
 Capture compares HEAD, index identity, a deterministic porcelain-equivalent status/path fingerprint, and captured/effective working-content identity before and after collection. The status fingerprint is derived from fixed plumbing and direct filesystem state rather than invoking extension-capable working-tree diff/status conversion. A changed state discards the entire attempt and retries once. A second unstable attempt produces a capture failure; data from different moments is never blended.
 
-Capture instability is a capture/preflight failure when it prevents creation of a reliable ChangeSet. It therefore produces no readiness verdict. A later-stage inability to obtain required evidence from an already established, non-empty ChangeSet is recorded by 1.4 as structured required-evidence-gap execution evidence; a later reducer may use that evidence for `INCONCLUSIVE`, but 1.4 does not implement the reducer.
+Capture instability is a capture/preflight failure when it prevents creation of a reliable ChangeSet. It therefore produces no readiness verdict. A later-stage inability to obtain required evidence from an already established, non-empty ChangeSet is recorded by the executor as structured required-evidence-gap execution evidence; ReviewArtifact reduction may use that evidence for `INCONCLUSIVE`.
 
-Milestone 1.4 consumes the captured identity when building a fresh disposable executable snapshot for each command. Every construction recaptures the source state before and after materialization, validates repository discovery and canonical-guidance digests against snapshot bytes with rooted no-follow reads, and records the ChangeSet, discovery, materialization ordinal, snapshot, request, and result bindings in planning/execution evidence. This is the minimum moment binding; it is not a provenance database.
+The snapshot executor consumes the captured identity when building a fresh disposable executable snapshot for each command. Every construction recaptures the source state before and after materialization, validates repository discovery and canonical-guidance digests against snapshot bytes with rooted no-follow reads, and records the ChangeSet, discovery, materialization ordinal, snapshot, request, and result bindings in planning/execution evidence. This is the minimum moment binding; it is not a provenance database.
 
 ## Empty effective state
 
@@ -68,9 +68,9 @@ A full pre-PR review cannot treat absence of change as evidence that Spec, Stand
 
 ## ChangeSet schema lifecycle
 
-ChangeSet has its own versioned schema beginning in milestone 1.2. The frozen `changeset-1.0.0` contract and identity remain readable without `explicit_includes`; the current capture contract is `changeset-1.1.0`, whose canonical serialized include list participates in identity. `load_changeset` supports exactly these two versions and performs no implicit migration; unknown versions are rejected. Each generated JSON Schema is checked in independently. The version lifecycle is independent of the ReviewArtifact schema introduced in milestone 1.6. A field named `schema_version` always versions the enclosing contract, never the entire project.
+ChangeSet has its own versioned schema. The frozen `changeset-1.0.0` contract and identity remain readable without `explicit_includes`; the current capture contract is `changeset-1.1.0`, whose canonical serialized include list participates in identity. `load_changeset` supports exactly these two versions and performs no implicit migration; unknown versions are rejected. Each generated JSON Schema is checked in independently. The version lifecycle is independent of the ReviewArtifact schema. A field named `schema_version` always versions the enclosing contract, never the entire project.
 
-## Milestone 1.2 executable contract
+## ChangeSet executable contract
 
 The CLI surface is:
 
@@ -79,7 +79,7 @@ pre-pr-verify capture --repo <path> --base <ref> \
   --scope pending|committed-only [--output <path>]
 ```
 
-It captures and validates a deterministic ChangeSet only. Output defaults to stdout. File output requires an explicit path and may not target `.git/`. Successful capture, including an empty ChangeSet, exits `0`; invalid invocation/scope exits `3`; an internal contract/tool error exits `4`. This milestone does not produce a readiness verdict, materialize an executable snapshot, or run verification commands.
+It captures and validates a deterministic ChangeSet only. Output defaults to stdout. File output requires an explicit path and may not target `.git/`. Successful capture, including an empty ChangeSet, exits `0`; invalid invocation/scope exits `3`; an internal contract/tool error exits `4`. The capture contract does not produce a readiness verdict, materialize an executable snapshot, or run verification commands.
 
 Its hard test matrix includes real temporary repositories covering committed divergence and merge-base behavior; every pending layer, including tracked unstaged-only state; combined origins; deletion, rename, mode, symlink, gitlink, binary, large and ignored files; tab/newline hostile filenames; intermediate-symlink escape; invalid and empty scopes; HEAD/index/status/content capture races; deterministic identity; Git extension suppression; committed-only exclusion; and complete preservation of the source repository. Platform filesystems that cannot create non-UTF-8 names use an explicit skip plus byte-safe model coverage.
 

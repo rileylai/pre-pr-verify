@@ -16,7 +16,7 @@ The Skill owns:
 - semantic test-sufficiency review;
 - evidence-backed finding proposals.
 
-Milestone 1.5 represents those proposals as a bound semantic assessment through
+The semantic-assessment layer represents those proposals as a bound assessment through
 the deterministic core. The Skill/model supplies semantic status, rationale,
 and finding judgments; the core validates axis completeness, evidence-reference
 targets through the same canonical loader used for external deserialization,
@@ -24,11 +24,11 @@ source precedence comparisons, and identity bindings. It does not
 claim that schema validation proves the semantic conclusion.
 
 Semantic artifact bounds, human-report presentation budgets, and runtime
-model/context budgets are separate concerns. Milestone 1.5 bounds only the
+model/context budgets are separate concerns. The semantic-assessment contract bounds only the
 canonical persisted assessment. It may inspect complete identity-bound captured
 sources progressively and stores short previews plus stable locators; it does
 not infer token budgets or provider context windows from artifact characters.
-Milestone 1.6 owns concise rendering without deleting canonical evidence. Its
+The ReviewArtifact layer owns concise rendering without deleting canonical evidence. Its
 versioned `ReviewArtifact` binds the exact ChangeSet, DiscoveryResult,
 VerificationPlan, VerificationEvidence, and SemanticAssessment identities and
 records verifier version/build identity. It carries bounded review-facing
@@ -77,7 +77,7 @@ PrePR Verify fixes the portable review workflow, evidence, verdict, and safety s
 
 ## Versioned data contracts
 
-ChangeSet and ReviewArtifact are independent versioned contracts. ChangeSet begins in milestone 1.2 and describes captured repository state. ReviewArtifact begins in milestone 1.6 and describes completed review evidence, axes, reduction, and reporting. Each has its own schema version and release lifecycle; neither uses a project-wide global `schema_version`.
+ChangeSet and ReviewArtifact are independent versioned contracts. ChangeSet describes captured repository state, while ReviewArtifact describes completed review evidence, axes, reduction, and reporting. Each has its own schema version and release lifecycle; neither uses a project-wide global `schema_version`.
 
 ## Read-only meaning
 

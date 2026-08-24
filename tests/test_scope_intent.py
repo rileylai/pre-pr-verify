@@ -338,7 +338,7 @@ def test_preselection_discovery_reads_metadata_not_source_content(
     assert preview.line_estimate_complete is False
 
 
-def test_learnloop_shape_recommends_materially_narrower_working_scope(
+def test_representative_narrow_scope_recommends_working_changes(
     repository: Path,
 ) -> None:
     for batch in range(21):

@@ -12,11 +12,11 @@ Use a Codex Skill for semantic judgment and orchestration, backed by a small ind
 
 V1 requires an explicit base and preserves committed, staged, unstaged, and non-ignored untracked origins. It creates a deterministic effective identity without pretending the layers are one three-dot diff.
 
-## ADR-003: Fail-closed three-axis verdict
+## ADR-003: Fail-closed five-axis verdict
 
 **Status:** Accepted
 
-Spec, Standards, and Verification remain distinct. Any confirmed failure yields `NEEDS_CHANGES`; otherwise missing required evidence yields `INCONCLUSIVE`; only completed passing assessments yield `READY`.
+Spec, Standards, Impact, Test Sufficiency, and Contextual Security remain distinct, while Verification remains separate evidence. Any confirmed failure yields `NEEDS_CHANGES`; otherwise missing required evidence yields `INCONCLUSIVE`; only completed passing assessments yield `READY`.
 
 ## ADR-004: Repository content is evidence, not authority
 
@@ -42,11 +42,11 @@ Typed Python models and code invariants are authoritative. They generate checked
 
 Use Python 3.11+, uv with `uv_build`, Pydantic v2, pytest, argparse, and standard-library subprocess. Avoid redundant CLI and schema frameworks.
 
-## ADR-008: Strict milestone boundaries
+## ADR-008: Strict implementation boundaries
 
 **Status:** Accepted
 
-Foundation contains documentation, project configuration, and a smoke harness only. ChangeSet models and capture begin in the next independently verified milestone. V2/V3 implementation decisions remain deferred to their versions.
+Foundation contains documentation, project configuration, and a smoke harness only. ChangeSet models and capture follow in an independently verified stage. V2/V3 implementation decisions remain deferred to their versions.
 
 ## ADR-009: Preflight is not a readiness verdict
 
@@ -58,7 +58,7 @@ Invocation and comparison-scope failures return exit code `3` without a readines
 
 **Status:** Accepted
 
-ChangeSet begins in milestone 1.2 and ReviewArtifact in milestone 1.6. Each has independent typed models, generated schema, invariants, and schema version; there is no project-wide global artifact version.
+ChangeSet and ReviewArtifact have independent typed models, generated schemas, invariants, and schema versions; there is no project-wide global artifact version.
 
 ## ADR-011: Safety approval has a bounded waiver scope
 
@@ -70,7 +70,7 @@ Core execution and authority invariants cannot be waived by repository config or
 
 **Status:** Accepted
 
-Each milestone dogfoods only the capability it actually implements. A complete self-review first exists after 1.6 but is only additional release evidence until 1.7. Future candidates should be reviewed by a last-known-good verifier, and candidate self-review is never the sole trusted gate.
+Each capability stage dogfoods only what it actually implements. A complete self-review exists only once the full local pipeline is available, and it remains additional release evidence until independent validation is complete. Future candidates should be reviewed by a last-known-good verifier, and candidate self-review is never the sole trusted gate.
 
 ## ADR-013: Fixed review skeleton with repository-native inputs
 
@@ -102,13 +102,13 @@ The established `changeset-1.0.0` schema and identity remain frozen as a legacy 
 
 **Status:** Accepted
 
-Once a valid ChangeSet and plan establish review scope, inability to materialize complete effective content is execution evidence, not a new capture/preflight failure. 1.4 records an explicitly incomplete, file-less SnapshotManifest and a matching non-executable `ExecutionRequest`/`ExecutionResult` with a structured capability, configuration, or permission cause; required checks retain `required_evidence_gap`. Incomplete manifests cannot expose partial executable files, and no process starts from them.
+Once a valid ChangeSet and plan establish review scope, inability to materialize complete effective content is execution evidence, not a new capture/preflight failure. The executor records an explicitly incomplete, file-less SnapshotManifest and a matching non-executable `ExecutionRequest`/`ExecutionResult` with a structured capability, configuration, or permission cause; required checks retain `required_evidence_gap`. Incomplete manifests cannot expose partial executable files, and no process starts from them.
 
 ## ADR-018: Preserve executed results across late source-preservation failure
 
 **Status:** Accepted
 
-Snapshot materialization failure before a child starts produces the existing `NOT_RUN` evidence gap. If the final source recapture detects repository mutation after a child has already run, 1.4 retains that command's actual status, exit code, and bounded output, then adds a separately bound `SourcePreservationFailure` signal with a required evidence gap. No late preservation failure is rewritten as a process skip, and no final verdict reducer is added here.
+Snapshot materialization failure before a child starts produces the existing `NOT_RUN` evidence gap. If the final source recapture detects repository mutation after a child has already run, the executor retains that command's actual status, exit code, and bounded output, then adds a separately bound `SourcePreservationFailure` signal with a required evidence gap. No late preservation failure is rewritten as a process skip, and no final verdict reducer is added here.
 
 ## ADR-019: Bounded literal lookahead redaction
 
@@ -120,39 +120,39 @@ Streaming explicit-value redaction uses a bounded literal lookahead matcher that
 
 **Status:** Accepted
 
-Milestone 1.5 represents semantic judgment as a separate `semantic_assessment-1.0.0` contract bound to the exact ChangeSet, DiscoveryResult, VerificationPlan, and VerificationEvidence identities. It records Spec, Standards, Impact, Test Sufficiency, and Contextual Security assessments plus evidence-backed confirmed, unverified, or evidence-gap findings. Only confirmed findings may be blocking. Equal-precedence requirement candidates are explicitly classified as complementary or contradictory; lower-precedence evidence cannot override the winning tier. The semantic layer performs bounded generic context over captured content and never executes repository commands. Axis reduction, readiness status, ReviewArtifact, and reporting remain 1.6.
+Semantic judgment is represented as a separate `semantic_assessment-1.0.0` contract bound to the exact ChangeSet, DiscoveryResult, VerificationPlan, and VerificationEvidence identities. It records Spec, Standards, Impact, Test Sufficiency, and Contextual Security assessments plus evidence-backed confirmed, unverified, or evidence-gap findings. Only confirmed findings may be blocking. Equal-precedence requirement candidates are explicitly classified as complementary or contradictory; lower-precedence evidence cannot override the winning tier. The semantic layer performs bounded generic context over captured content and never executes repository commands. Axis reduction, readiness status, ReviewArtifact, and reporting remain separate deterministic stages.
 
-## ADR-021: Reference-oriented assessment bounds and 1.6 report boundary
+## ADR-021: Reference-oriented assessment bounds and report boundary
 
 **Status:** Accepted
 
 Semantic assessment loading uses a canonical reference index derived from the four bound deterministic artifacts. Producer and external deserialization use the same validator; identity recomputation alone is insufficient. Reference kinds must be capable of supporting the cited finding, and all winning equal-precedence requirement candidates require pair/group comparison coverage. Empty ChangeSets stop at `nothing_to_review`. Assessment free text and collections are bounded so the contract cannot become a second source/log artifact. ADR-022 refines the index representation and separates these artifact bounds from presentation and runtime context budgets.
 
-Milestone 1.6 will render the human report from canonical `ReviewArtifact` JSON. The default report is concise: verdict, axis statuses, checks, finding summaries, and references. Detailed evidence is expandable or on demand; long reasoning and evidence are not duplicated into a second report artifact. This ADR does not implement the reducer, ReviewArtifact, or renderer.
+The Markdown renderer renders the human report from canonical `ReviewArtifact` JSON. The default report is concise: verdict, axis statuses, checks, finding summaries, and references. Detailed evidence is expandable or on demand; long reasoning and evidence are not duplicated into a second report artifact. This ADR does not change the reducer or ReviewArtifact contract.
 
 ## ADR-022: Separate artifact, presentation, and runtime context budgets
 
 **Status:** Accepted
 
-Milestone 1.5 character/count limits bound only canonical persisted semantic artifacts. They neither cap relevant captured source inspection nor imply provider tokens or model context windows. Complete UTF-8 source remains available progressively from the bound ChangeSet; the 2,048-character context excerpt is a preview backed by path and content identity. Large-change runtime work should prefer selection, bundling, and focused semantic passes before provider-specific token policy.
+Semantic-assessment character/count limits bound only canonical persisted artifacts. They neither cap relevant captured source inspection nor imply provider tokens or model context windows. Complete UTF-8 source remains available progressively from the bound ChangeSet; the 2,048-character context excerpt is a preview backed by path and content identity. Large-change runtime work should prefer selection, bundling, and focused semantic passes before provider-specific token policy.
 
 No semantic prose or collection is silently truncated. Limit failures are structured as prose or semantic-collection concerns. Prose may be compacted and retried only with its semantic structure and evidence bindings unchanged. A collection gap requires affected axes to remain inconclusive, and an overflow cannot produce a five-axis pass. The canonical reference index uses complete-set counts and digests instead of a bounded second copy of target IDs; actual reference existence is revalidated against the bound artifacts.
 
-Requirement comparisons have group semantics. One comparison classifies the complete cited group and covers all pairs within it; overlaps are ambiguous and rejected, and missing pair coverage is rejected. Thus a 16-source winning set can be completely reconciled by one group comparison and does not require raising the 64-comparison bound. Milestone 1.6 owns concise presentation only: presentation limits may select detail for display but never delete canonical evidence. This decision adds no reducer, renderer, `ReviewArtifact`, model token limit, or provider policy.
+Requirement comparisons have group semantics. One comparison classifies the complete cited group and covers all pairs within it; overlaps are ambiguous and rejected, and missing pair coverage is rejected. Thus a 16-source winning set can be completely reconciled by one group comparison and does not require raising the 64-comparison bound. ReviewArtifact owns concise presentation only: presentation limits may select detail for display but never delete canonical evidence. This decision adds no reducer, renderer, `ReviewArtifact`, model token limit, or provider policy.
 
 ## ADR-023: Fail-closed semantic axis ownership and authority sets
 
 **Status:** Accepted
 
-Milestone 1.5 mechanically binds each finding to exactly one compatible axis. Orphan, duplicate, cross-axis, category-incompatible, and `PASS`-with-confirmed-blocker states are invalid. Finding IDs are bounded to 128 characters, axis references use the same bound, and comparison source identifiers are fixed SHA-256 IDs. Identifier overflow is classified separately from prose and collection overflow. Generic context consumes no more than 65 term entries before reporting the 64-entry collection limit.
+The semantic-assessment contract mechanically binds each finding to exactly one compatible axis. Orphan, duplicate, cross-axis, category-incompatible, and `PASS`-with-confirmed-blocker states are invalid. Finding IDs are bounded to 128 characters, axis references use the same bound, and comparison source identifiers are fixed SHA-256 IDs. Identifier overflow is classified separately from prose and collection overflow. Generic context consumes no more than 65 term entries before reporting the 64-entry collection limit.
 
-Requirement reconciliation also constrains Spec evidence. Missing requirements and contradictory winning comparisons require an inconclusive Spec evidence gap; each contradictory group cites its participating winning sources through a Spec contradiction gap finding. This is semantic evidence validation, not the 1.6 final reducer. Standards authority is the explicit canonical `standards_source_ids` set. A trusted requirement selection does not become a Standards source by source type or trust label alone.
+Requirement reconciliation also constrains Spec evidence. Missing requirements and contradictory winning comparisons require an inconclusive Spec evidence gap; each contradictory group cites its participating winning sources through a Spec contradiction gap finding. This is semantic evidence validation, not final verdict reduction. Standards authority is the explicit canonical `standards_source_ids` set. A trusted requirement selection does not become a Standards source by source type or trust label alone.
 
 ## ADR-024: Deterministic ReviewArtifact reduction and report projection
 
 **Status:** Accepted
 
-Milestone 1.6 introduces `review-artifact-1.0.0`, bound to the exact five prior
+The `review-artifact-1.0.0` contract is bound to the exact five prior
 artifact identities and verifier version/build identity. The canonical loader
 recomputes the artifact from those inputs, so a recomputed identity cannot forge
 bindings, finding ownership, check classification, axis status, gaps, or verdict.
@@ -194,7 +194,7 @@ deterministic Python core; they do not pretend to be a standalone semantic
 reviewer. Full review invocation remains through the Skill, while the public CLI
 continues to expose deterministic capture only.
 
-Milestone 1.7 proves the frozen V1 chain with real-repository deterministic
+Release validation proves the frozen V1 chain with real-repository deterministic
 acceptance fixtures, clean package installation/import, schema and Skill
 validation, documentation consistency, self-dogfood, and a fresh independent
 Skill/release review. The semantic forward-test uses the available Codex Skill

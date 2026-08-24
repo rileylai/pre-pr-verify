@@ -195,8 +195,8 @@ and `Verification policy`, then require one final affirmative confirmation
 before canonical review starts. Blank is not confirmation; cancellation stops
 before semantic review.
 
-For a narrow LearnLoop-shaped flow with a working-scope recommendation and one
-discovered requirement source, the normal answers are `1` (scope), `1`
+For a representative narrow local review with a working-scope recommendation
+and one discovered requirement source, the normal answers are `1` (scope), `1`
 (requirement), `1` (verification authorization), then `yes`.
 
 With `interactive=False`, never call an input function or wait. Require the
@@ -244,7 +244,7 @@ both lists empty.
 `verifier_build` identifies the installed PrePR Verify core, not the author
 repository. For the normal Skill checkout use `git:<commit>` from the Skill
 checkout's own `git rev-parse HEAD`, but only when both staged and unstaged
-`src/pre_pr_verify/` are clean. A release-candidate runner may instead supply an
+`src/pre_pr_verify/` are clean. A candidate runner may instead supply an
 immutable candidate build ID. A built installation may use an installer-recorded
 wheel SHA-256. If none of those identities is available, fail preflight and do
 not create a ReviewArtifact. Never invent this value from repository prose.

@@ -92,15 +92,15 @@ def test_skill_runbook_routes_every_canonical_stage_and_policy_boundary() -> Non
     assert "review_focus" in runbook
 
 
-def test_numeric_setup_forward_path_covers_learnloop_shaped_interaction() -> None:
+def test_numeric_setup_forward_path_covers_representative_narrow_review() -> None:
     skill = Path("SKILL.md").read_text()
     runbook = Path("docs/09_v1_skill_runbook.md").read_text()
     combined = f"{skill}\n{runbook}"
 
     # A normal narrow dogfood can be completed with numeric setup choices and
     # one final affirmative confirmation, rather than copied scope labels.
-    learnloop_answers = ("1", "1", "1", "yes")
-    assert all(answer in combined for answer in learnloop_answers)
+    setup_answers = ("1", "1", "1", "yes")
+    assert all(answer in combined for answer in setup_answers)
     assert "1. Working changes" in combined
     assert "2. Current branch" in combined
     assert "3. Since commit" in combined
@@ -138,10 +138,10 @@ def test_runtime_has_no_developer_path_or_provider_key_dependency() -> None:
     assert "CODEX_API_KEY" not in runtime
 
 
-def test_release_candidate_version_and_documented_boundaries() -> None:
+def test_current_version_and_documented_boundaries() -> None:
     readme = Path("README.md").read_text()
 
-    assert __version__ == "0.1.1"
+    assert __version__ == "0.1.2"
     assert Path(".python-version").read_text().strip() == "3.12.13"
     assert "Semantic review, ReviewArtifact reduction/reporting, and GitHub integration remain unimplemented" not in readme
     assert "No `.env`" in readme

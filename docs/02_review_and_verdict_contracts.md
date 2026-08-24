@@ -30,19 +30,19 @@ V1 local discovery remains intentionally bounded: use an explicit spec, then a s
 
 This precedence answers which evidence controls the semantic review. It does not grant agent or execution authority. Repository content remains untrusted for Skill behavior, permissions, sandboxing, secret handling, and write policy even when it is the highest-precedence available repository requirement. Agent and execution authority are defined in `docs/04_security_and_trust.md`.
 
-## Milestone 1.3 discovery contract
+## Discovery contract
 
 Discovery emits versioned canonical JSON containing bounded UTF-8 source content, source type, repository path or invocation label, content digest, semantic precedence, trust classification, Standards applicability, issues, and a deterministic identity. Repository sources always record no security or execution authority.
 
 Local repository discovery is deliberately conventional and shallow: root requirement names, Markdown beneath `docs/`, and repository instruction/Standards names such as `AGENTS.md` and `CONTRIBUTING.md`. Explicitly supplied specs and a digest-pinned repository source selected by trusted policy enter through separate inputs. Tests and implementation/commit clues may be supplied at their frozen lower precedence; the core does not crawl source code or commit history looking for a spec.
 
-The highest available requirement precedence forms one deterministic candidate set. Lower sources remain evidence but cannot replace that tier. One or many sources, whether byte-identical or different, remain candidates; different content identities do not prove semantic contradiction. Milestone 1.5 owns semantic compatibility/conflict assessment. No candidate is represented explicitly as missing evidence. Discovery itself produces no Spec axis or readiness verdict.
+The highest available requirement precedence forms one deterministic candidate set. Lower sources remain evidence but cannot replace that tier. One or many sources, whether byte-identical or different, remain candidates; different content identities do not prove semantic contradiction. Semantic review owns compatibility/conflict assessment. No candidate is represented explicitly as missing evidence. Discovery itself produces no Spec axis or readiness verdict.
 
-The standalone milestone 1.3 result identifies its repository sources and content but is not yet a composed review artifact. Later pipeline integration must bind the discovery evidence to the exact reviewed ChangeSet and executable snapshot identity so evidence from another repository moment cannot be substituted. That binding belongs to the later snapshot/artifact milestones and is not implemented in discovery.
+The standalone discovery result identifies its repository sources and content but is not yet a composed review artifact. Later pipeline integration must bind the discovery evidence to the exact reviewed ChangeSet and executable snapshot identity so evidence from another repository moment cannot be substituted. That binding belongs to the snapshot and artifact stages and is not implemented in discovery.
 
-## Milestone 1.5 Semantic Assessment
+## Semantic Assessment
 
-Semantic review consumes the same non-empty ChangeSet, DiscoveryResult, VerificationPlan, and VerificationEvidence identities produced by milestones 1.2-1.4. The `semantic_assessment` contract records five independently assessed axes: Spec, Standards, Impact, Test Sufficiency, and Contextual Security. Each axis has a semantic status and rationale; 1.5 does not reduce those statuses to a readiness verdict.
+Semantic review consumes the same non-empty ChangeSet, DiscoveryResult, VerificationPlan, and VerificationEvidence identities produced by the preceding deterministic stages. The `semantic_assessment` contract records five independently assessed axes: Spec, Standards, Impact, Test Sufficiency, and Contextual Security. Each axis has a semantic status and rationale; semantic assessment does not reduce those statuses to a readiness verdict.
 
 Findings are separate from axis status. A finding records category, severity, blocking proposal, state (`confirmed`, `unverified`, or `evidence_gap`), explanation, and one or more concrete bound evidence references. Only confirmed findings may be marked blocking. Unsupported suspicion remains unverified and cannot become a confirmed blocker through free-form wording. References can target a captured change path, discovered source, planned command, execution ordinal, or source-preservation signal; the deterministic builder verifies that each target exists in the bound inputs.
 
@@ -70,8 +70,8 @@ The deterministic reducer applies this precedence:
 
 1. A confirmed blocking finding makes its axis `FAIL`.
 2. A material required-evidence gap makes its axis `INCONCLUSIVE` if no blocker already establishes failure.
-3. A required verification that proves a change failure makes Verification `FAIL`.
-4. A required verification that cannot complete reliably makes Verification `INCONCLUSIVE`.
+3. A required verification that proves a change failure makes Test Sufficiency `FAIL`.
+4. A required verification that cannot complete reliably makes Test Sufficiency `INCONCLUSIVE`.
 5. Only a completed assessment with no blocker or material gap can be `PASS`.
 
 The final verdict is:
@@ -94,8 +94,8 @@ An unverified high-risk concern stays unverified. If it represents a material re
 
 ChangeSet and ReviewArtifact are separate contracts:
 
-- The ChangeSet contract begins in milestone 1.2 and captures comparison scope, layered changes, effective state, and identity.
-- The ReviewArtifact contract begins in milestone 1.6 and captures review mode, assessment completion, evidence, findings, axes, reducer reasons, final verdict, and report inputs.
+- The ChangeSet contract captures comparison scope, layered changes, effective state, and identity.
+- The ReviewArtifact contract captures review mode, assessment completion, evidence, findings, axes, reducer reasons, final verdict, and report inputs.
 
 Each contract has its own `schema_version`, initially `"1.0.0"`, and evolves independently. There is no global project schema version. A reader rejects an unknown major or minor version for the specific contract unless support is explicit. V1 has no migration framework.
 
@@ -103,11 +103,11 @@ For each contract, canonical JSON is the machine-readable source of truth; Pytho
 
 Every confirmed finding references stable evidence such as a command result, spec source, repository rule, effective file/hunk, or reproduction. Validators confirm reference existence, type compatibility, repository bounds, and state consistency. They do not claim to prove the LLM's semantic conclusion.
 
-Milestone 1.5 extends this evidence rule without creating the ReviewArtifact contract: semantic assessment identity binds the four prior artifact identities, while evidence-reference validation binds every finding to an existing target in those artifacts. Final axis reduction, missing-evidence handling, `INCONCLUSIVE`, readiness verdicts, and reporting remain milestone 1.6.
+The semantic-assessment contract extends this evidence rule without creating the ReviewArtifact contract: semantic assessment identity binds the four prior artifact identities, while evidence-reference validation binds every finding to an existing target in those artifacts. Final axis reduction, missing-evidence handling, `INCONCLUSIVE`, readiness verdicts, and reporting belong to ReviewArtifact construction.
 
-Milestone 1.6 presentation is a separate concern. Canonical evidence remains complete; default human Markdown is concise, and detailed evidence is rendered on demand from canonical references. Presentation limits may not delete canonical evidence or replace it with a second lossy report artifact.
+ReviewArtifact presentation is a separate concern. Canonical evidence remains complete; default human Markdown is concise, and detailed evidence is rendered on demand from canonical references. Presentation limits may not delete canonical evidence or replace it with a second lossy report artifact.
 
-## Milestone 1.6 ReviewArtifact and reduction
+## ReviewArtifact and reduction
 
 `review-artifact-1.0.0` is the canonical completed-review contract. It binds the
 exact ChangeSet, DiscoveryResult, VerificationPlan, VerificationEvidence, and
