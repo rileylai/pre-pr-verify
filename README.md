@@ -45,12 +45,25 @@ cd ~/.codex/skills/pre-pr-verify
 uv sync --locked
 ```
 
-Invoke it in Codex with an explicit local repository and base, for example:
+In a human-attached Codex session, invoke it with a repository and select one of
+the displayed scope intents and boundaries, for example:
 
 ```text
-Use $pre-pr-verify to review /path/to/repository against base main.
+Use $pre-pr-verify to review /path/to/repository. I want current branch scope;
+show me the bounded base candidates before I choose one.
 Treat docs/feature-spec.md as the explicit requirement.
 ```
+
+The interactive setup supports working changes, current branch with explicit
+base selection, an inclusive feature-start commit selected from recent history,
+and a custom base/ref. It previews the resolved boundary and size before
+semantic review using Git metadata only; full source capture begins after
+confirmation. Ambiguous custom short refs fail preflight, and unavailable
+content-free line estimates are shown as unavailable. Recommendations and
+large-scope warnings are advisory: the
+Skill never silently selects working changes, `main`, or any other boundary.
+Automation must provide the repository and complete explicit scope/config; if
+anything is missing it fails preflight without prompting or waiting.
 
 The root `SKILL.md` is the full-review entrypoint. It orchestrates the canonical
 Python builders/loaders for ChangeSet, discovery, planning/execution,
@@ -76,7 +89,7 @@ To validate the built core independently of the source checkout:
 ```sh
 uv venv /tmp/pre-pr-verify-install
 uv pip install --python /tmp/pre-pr-verify-install/bin/python \
-  dist/pre_pr_verify-0.1.0-py3-none-any.whl
+  dist/pre_pr_verify-0.1.1-py3-none-any.whl
 /tmp/pre-pr-verify-install/bin/python -c \
   "import pre_pr_verify; print(pre_pr_verify.__version__)"
 ```

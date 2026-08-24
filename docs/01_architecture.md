@@ -58,7 +58,7 @@ After scope establishment, missing or unreliable required evidence is part of an
 ## V1 workflow
 
 ```text
-Explicit repository and base
+Explicit repository and base (possibly materialized by human-attached setup)
   -> preflight and deterministic ChangeSet
   -> reject nothing_to_review
   -> requirement and Standards evidence discovery
@@ -90,3 +90,11 @@ V1 is a non-authoring reviewer. It may create caches and build artifacts only in
 boundary. Detailed contracts live in task-specific numbered documents and are
 read only when their stage is active. No future-version module or empty
 abstraction is created merely to mirror a planned architecture.
+
+The Scope Intent Resolver is Skill orchestration support, not a second scope
+contract. It discovers bounded choices, requires an explicit human or
+automation selection, pins the result to an immutable base commit, and previews
+Git metadata before full source capture or semantic loading. Confirmation is
+the boundary between metadata-only setup and the unchanged deterministic
+ChangeSet. The ChangeSet and ReviewArtifact contracts remain the only canonical
+readiness boundaries.

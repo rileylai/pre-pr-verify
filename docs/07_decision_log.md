@@ -200,3 +200,44 @@ validation, documentation consistency, self-dogfood, and a fresh independent
 Skill/release review. The semantic forward-test uses the available Codex Skill
 context and fixed safety rubric; it adds no provider API keys, token accounting,
 runtime orchestration, network dependency, or V2/V3 behavior.
+
+## ADR-026: Explicit Scope Intent Resolver above the frozen ChangeSet
+
+**Status:** Accepted
+
+The post-V1 usability patch keeps scope setup in Skill orchestration support.
+Human-attached use may discover bounded base candidates and first-parent recent
+commits, recommend an intent, and preview deterministic scope metadata, but it
+must receive an explicit selection before capture. Working changes pin HEAD;
+current branch pins the selected candidate; an inclusive feature-start choice
+pins its first parent; custom pins the supplied ref. Headless missing input is a
+preflight failure and never prompts. Every completed choice becomes the existing
+explicit repository/base/`pending` ChangeSet input; no default branch, hidden
+boundary, reducer rule, or report behavior is added.
+
+Large or mixed-scope detection is advisory only. Review focus may prioritize
+inspection but cannot filter the ChangeSet or restrict callers, tests, adjacent
+code, and contracts available to the reviewer. A future setup display may show
+canonical requirement discovery and trusted execution-policy provenance, but
+display does not change requirement precedence or grant execution authority.
+
+## ADR-027: Metadata-only setup and unambiguous custom refs
+
+**Status:** Accepted
+
+Pre-selection discovery and preview use only hardened, bounded Git ref,
+first-parent history, commit-count, and path/status metadata. They do not call
+canonical capture or open working-tree/index blobs. Because content-derived line
+statistics would cross that boundary, setup reports them unavailable rather
+than fabricating an estimate. Explicit confirmation authorizes the first full
+canonical ChangeSet capture; this is orchestration sequencing, not a new scope
+implementation.
+
+Custom input accepts a full commit SHA, a fully qualified ref, or a short name
+that exists in exactly one of Git's deterministic ref namespaces. Multiple
+namespace matches are ambiguity even when they point at the same commit.
+Invalid refs and refs that cannot peel to a commit fail preflight. Successful
+resolution remains SHA-pinned. When working changes exist and the first
+plausible branch candidate exceeds the existing large commit/path threshold
+with a broader path set, recommendation favors working changes without selecting
+it; no scoring engine or reducer rule is introduced.

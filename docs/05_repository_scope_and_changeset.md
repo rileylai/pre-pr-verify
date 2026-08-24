@@ -4,12 +4,33 @@
 
 V1 requires an explicit repository and base ref. It does not infer a default branch. Capture records the requested base ref, resolved base commit, merge-base commit, HEAD commit, and scope mode. Invalid invocation, a non-Git repository, a missing or invalid ref, and an absent merge base/comparison scope are preflight failures. They return exit code `3`; because no review exists, they do not produce a readiness verdict.
 
+The post-V1 Skill usability layer may help a human materialize that explicit
+input. Its working-changes intent pins the current HEAD commit as the base;
+current-branch and recent-commit intents require an explicit selection from
+bounded choices; custom requires an explicit ref. Every result is pinned to a
+commit SHA before calling this unchanged contract. Recommendations and preview
+advisories are not scope inference and have no artifact or reducer semantics.
+Headless invocation without complete explicit scope fails preflight without
+waiting for input.
+
+Pre-selection setup reads bounded Git ref/history/path/status metadata only. It
+does not invoke full ChangeSet capture or open working-tree/index blobs to count
+paths or estimate lines. Content-free previews mark line estimates unavailable;
+after explicit confirmation the resolver invokes the unchanged canonical
+capture. A custom short ref must match exactly one Git namespace; full refs and
+full commit SHAs must resolve to a commit. Ambiguous, invalid, and non-commit
+inputs fail preflight.
+
 The default `pending` scope represents:
 
 - committed branch changes from merge base through HEAD;
 - staged changes from HEAD to index;
 - unstaged changes from index to working tree;
 - non-ignored untracked files.
+
+An optional Skill-level review focus is not a ChangeSet path filter. It may
+prioritize semantic inspection, but the canonical review remains bound to every
+change captured for the selected comparison.
 
 `committed-only` excludes staged, unstaged, and untracked changes. Ignored files are excluded unless explicitly included by the user, and `.git/` is always excluded.
 
