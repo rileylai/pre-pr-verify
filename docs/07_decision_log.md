@@ -115,3 +115,35 @@ Snapshot materialization failure before a child starts produces the existing `NO
 **Status:** Accepted
 
 Streaming explicit-value redaction uses a bounded literal lookahead matcher that visits every input offset, finds the union of all protected intervals (including different-offset and self-overlapping matches), and retains only a bounded tail across process-output chunks and truncation boundaries. If a boundary cannot be proven safe, the excerpt is suppressed. If the replacement marker overlaps any protected pattern, or pattern limits are exceeded, redaction fails closed by suppressing excerpts. A preservation-failure signal may bind only to an execution whose status is not `NOT_RUN`.
+
+## ADR-020: Bound semantic assessment to deterministic evidence
+
+**Status:** Accepted
+
+Milestone 1.5 represents semantic judgment as a separate `semantic_assessment-1.0.0` contract bound to the exact ChangeSet, DiscoveryResult, VerificationPlan, and VerificationEvidence identities. It records Spec, Standards, Impact, Test Sufficiency, and Contextual Security assessments plus evidence-backed confirmed, unverified, or evidence-gap findings. Only confirmed findings may be blocking. Equal-precedence requirement candidates are explicitly classified as complementary or contradictory; lower-precedence evidence cannot override the winning tier. The semantic layer performs bounded generic context over captured content and never executes repository commands. Axis reduction, readiness status, ReviewArtifact, and reporting remain 1.6.
+
+## ADR-021: Reference-oriented assessment bounds and 1.6 report boundary
+
+**Status:** Accepted
+
+Semantic assessment loading uses a canonical reference index derived from the four bound deterministic artifacts. Producer and external deserialization use the same validator; identity recomputation alone is insufficient. Reference kinds must be capable of supporting the cited finding, and all winning equal-precedence requirement candidates require pair/group comparison coverage. Empty ChangeSets stop at `nothing_to_review`. Assessment free text and collections are bounded so the contract cannot become a second source/log artifact. ADR-022 refines the index representation and separates these artifact bounds from presentation and runtime context budgets.
+
+Milestone 1.6 will render the human report from canonical `ReviewArtifact` JSON. The default report is concise: verdict, axis statuses, checks, finding summaries, and references. Detailed evidence is expandable or on demand; long reasoning and evidence are not duplicated into a second report artifact. This ADR does not implement the reducer, ReviewArtifact, or renderer.
+
+## ADR-022: Separate artifact, presentation, and runtime context budgets
+
+**Status:** Accepted
+
+Milestone 1.5 character/count limits bound only canonical persisted semantic artifacts. They neither cap relevant captured source inspection nor imply provider tokens or model context windows. Complete UTF-8 source remains available progressively from the bound ChangeSet; the 2,048-character context excerpt is a preview backed by path and content identity. Large-change runtime work should prefer selection, bundling, and focused semantic passes before provider-specific token policy.
+
+No semantic prose or collection is silently truncated. Limit failures are structured as prose or semantic-collection concerns. Prose may be compacted and retried only with its semantic structure and evidence bindings unchanged. A collection gap requires affected axes to remain inconclusive, and an overflow cannot produce a five-axis pass. The canonical reference index uses complete-set counts and digests instead of a bounded second copy of target IDs; actual reference existence is revalidated against the bound artifacts.
+
+Requirement comparisons have group semantics. One comparison classifies the complete cited group and covers all pairs within it; overlaps are ambiguous and rejected, and missing pair coverage is rejected. Thus a 16-source winning set can be completely reconciled by one group comparison and does not require raising the 64-comparison bound. Milestone 1.6 owns concise presentation only: presentation limits may select detail for display but never delete canonical evidence. This decision adds no reducer, renderer, `ReviewArtifact`, model token limit, or provider policy.
+
+## ADR-023: Fail-closed semantic axis ownership and authority sets
+
+**Status:** Accepted
+
+Milestone 1.5 mechanically binds each finding to exactly one compatible axis. Orphan, duplicate, cross-axis, category-incompatible, and `PASS`-with-confirmed-blocker states are invalid. Finding IDs are bounded to 128 characters, axis references use the same bound, and comparison source identifiers are fixed SHA-256 IDs. Identifier overflow is classified separately from prose and collection overflow. Generic context consumes no more than 65 term entries before reporting the 64-entry collection limit.
+
+Requirement reconciliation also constrains Spec evidence. Missing requirements and contradictory winning comparisons require an inconclusive Spec evidence gap; each contradictory group cites its participating winning sources through a Spec contradiction gap finding. This is semantic evidence validation, not the 1.6 final reducer. Standards authority is the explicit canonical `standards_source_ids` set. A trusted requirement selection does not become a Standards source by source type or trust label alone.

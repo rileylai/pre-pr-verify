@@ -16,6 +16,20 @@ The Skill owns:
 - semantic test-sufficiency review;
 - evidence-backed finding proposals.
 
+Milestone 1.5 represents those proposals as a bound semantic assessment through
+the deterministic core. The Skill/model supplies semantic status, rationale,
+and finding judgments; the core validates axis completeness, evidence-reference
+targets through the same canonical loader used for external deserialization,
+source precedence comparisons, and identity bindings. It does not
+claim that schema validation proves the semantic conclusion.
+
+Semantic artifact bounds, human-report presentation budgets, and runtime
+model/context budgets are separate concerns. Milestone 1.5 bounds only the
+canonical persisted assessment. It may inspect complete identity-bound captured
+sources progressively and stores short previews plus stable locators; it does
+not infer token budgets or provider context windows from artifact characters.
+Milestone 1.6 will own concise rendering without deleting canonical evidence.
+
 The deterministic core owns:
 
 - Git scope and ChangeSet capture;
