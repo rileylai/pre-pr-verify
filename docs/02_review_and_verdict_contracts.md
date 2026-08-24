@@ -106,3 +106,54 @@ Every confirmed finding references stable evidence such as a command result, spe
 Milestone 1.5 extends this evidence rule without creating the ReviewArtifact contract: semantic assessment identity binds the four prior artifact identities, while evidence-reference validation binds every finding to an existing target in those artifacts. Final axis reduction, missing-evidence handling, `INCONCLUSIVE`, readiness verdicts, and reporting remain milestone 1.6.
 
 Milestone 1.6 presentation is a separate concern. Canonical evidence remains complete; default human Markdown is concise, and detailed evidence is rendered on demand from canonical references. Presentation limits may not delete canonical evidence or replace it with a second lossy report artifact.
+
+## Milestone 1.6 ReviewArtifact and reduction
+
+`review-artifact-1.0.0` is the canonical completed-review contract. It binds the
+exact ChangeSet, DiscoveryResult, VerificationPlan, VerificationEvidence, and
+SemanticAssessment identities plus verifier version/build identity. It stores
+the five reduced axes, complete semantic finding ownership, bounded check
+summaries, structured required-evidence gaps, reducer reasons, and final verdict.
+It does not copy captured source/spec content or stdout/stderr; stable paths,
+source IDs, bounded check IDs or their SHA-256 references, execution ordinals,
+preservation ordinals, and upstream
+artifact identities remain the route to detail. Producer construction and
+external loading recompute the complete reduction from all five bound inputs.
+Verifier version/build identity is supplied independently to both construction
+and loading; serialized metadata cannot self-assert trusted provenance.
+When a frozen upstream check/gap collection exceeds the retained-summary bound,
+the reducer still consumes the complete set, persists its count and digest plus
+explicit retained/omitted and classification counts, and links detail through
+the bound plan/evidence identities. This is explicit aggregation, not silent
+truncation, and cannot change verdict semantics.
+
+Axis reduction is deterministic. A confirmed blocking semantic finding makes
+its owning axis `FAIL`. A failed required command classified as `verification`
+is confirmed change-failure evidence and makes Test Sufficiency `FAIL`. Required
+semantic or execution gaps make their affected axes `INCONCLUSIVE` unless an
+independent blocker already establishes `FAIL`. Source-preservation failure
+invalidates shared review confidence and makes every otherwise non-failing axis
+`INCONCLUSIVE`, while preserving the actual execution result. A semantic `FAIL`
+without a confirmed blocking finding cannot become deterministic failure and is
+reduced to `INCONCLUSIVE`. Unsupported nonblocking suspicion alone does not
+change a completed `PASS`.
+
+Final reduction uses the smallest precedence rule: any confirmed semantic
+blocker or failed required verification classified as a change failure yields
+`NEEDS_CHANGES`; otherwise any gap or non-PASS axis yields `INCONCLUSIVE`;
+otherwise the verdict is `READY`. Therefore a confirmed blocker takes
+precedence when blockers and gaps coexist, but the artifact and report retain
+every gap. Exit codes are `0` for `READY`, `1` for `NEEDS_CHANGES`, and `2` for
+`INCONCLUSIVE`. Existing preflight/no-review code `3` remains outside the
+ReviewArtifact lifecycle. Verdict selection is complete before rendering, so a
+renderer failure cannot alter the canonical verdict.
+
+The Markdown renderer is a projection of ReviewArtifact only. Its default form
+contains verdict, five axes, a bounded check summary with complete-set
+references/counts, blocking findings (including required verification failures),
+nonblocking/unverified findings, required gaps, and concise canonical references.
+It never interprets prose or command output to choose a status.
+Default presentation selects a small bounded number of checks, findings, gaps,
+and references, then states every omitted count and complete-set/artifact
+identity. Untrusted semantic prose is rendered as escaped one-line text (or a
+stable digest when too long), so it cannot inject Markdown report structure.

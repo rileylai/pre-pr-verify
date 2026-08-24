@@ -55,6 +55,16 @@ The versioned `VerificationEvidence` contract binds the plan and one command-exe
 
 Milestone 1.5 may inspect the captured ChangeSet's complete effective UTF-8 text progressively with generic search/context to support impact and test-sufficiency reasoning. Persisted context excerpts remain bounded previews and are not a source-reading or model-token cap. It does not execute commands, reread an unbound repository moment, install scanners, or infer a language/dependency matrix. Any proposed targeted verification remains a semantic finding or separate proposal; execution remains solely the 1.4 deterministic adapter. Semantic findings bind to the existing ChangeSet, DiscoveryResult, VerificationPlan, and VerificationEvidence identities.
 
+Milestone 1.6 consumes this evidence without executing commands. Structural
+floor checks are summarized as satisfied by their validated artifact/control
+flow; their intentional lack of `ExecutionResult` is not a gap. Command status
+and failure kind remain distinct in the ReviewArtifact summary: `not_run` is
+never rewritten as an executed failure, and failed required verification is
+distinguished from timeout, capability, configuration, permission,
+infrastructure, and unclassified gaps. Incomplete snapshots therefore cannot
+appear successful. Post-execution source-preservation failures remain separate
+from the retained command result and invalidate readiness confidence.
+
 ## Evaluation
 
 Default CI is deterministic, no-network, and uses real temporary Git repositories where Git behavior matters. Unit, integration, security, schema, invariant, and fixture tests must all pass.

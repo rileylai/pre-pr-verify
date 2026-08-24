@@ -28,7 +28,12 @@ model/context budgets are separate concerns. Milestone 1.5 bounds only the
 canonical persisted assessment. It may inspect complete identity-bound captured
 sources progressively and stores short previews plus stable locators; it does
 not infer token budgets or provider context windows from artifact characters.
-Milestone 1.6 will own concise rendering without deleting canonical evidence.
+Milestone 1.6 owns concise rendering without deleting canonical evidence. Its
+versioned `ReviewArtifact` binds the exact ChangeSet, DiscoveryResult,
+VerificationPlan, VerificationEvidence, and SemanticAssessment identities and
+records verifier version/build identity. It carries bounded review-facing
+summaries and the already-bounded semantic findings, never source files, specs,
+or command output.
 
 The deterministic core owns:
 

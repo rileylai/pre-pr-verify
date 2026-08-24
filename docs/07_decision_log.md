@@ -147,3 +147,37 @@ Requirement comparisons have group semantics. One comparison classifies the comp
 Milestone 1.5 mechanically binds each finding to exactly one compatible axis. Orphan, duplicate, cross-axis, category-incompatible, and `PASS`-with-confirmed-blocker states are invalid. Finding IDs are bounded to 128 characters, axis references use the same bound, and comparison source identifiers are fixed SHA-256 IDs. Identifier overflow is classified separately from prose and collection overflow. Generic context consumes no more than 65 term entries before reporting the 64-entry collection limit.
 
 Requirement reconciliation also constrains Spec evidence. Missing requirements and contradictory winning comparisons require an inconclusive Spec evidence gap; each contradictory group cites its participating winning sources through a Spec contradiction gap finding. This is semantic evidence validation, not the 1.6 final reducer. Standards authority is the explicit canonical `standards_source_ids` set. A trusted requirement selection does not become a Standards source by source type or trust label alone.
+
+## ADR-024: Deterministic ReviewArtifact reduction and report projection
+
+**Status:** Accepted
+
+Milestone 1.6 introduces `review-artifact-1.0.0`, bound to the exact five prior
+artifact identities and verifier version/build identity. The canonical loader
+recomputes the artifact from those inputs, so a recomputed identity cannot forge
+bindings, finding ownership, check classification, axis status, gaps, or verdict.
+The artifact keeps complete bounded semantic findings plus reference-oriented
+check/gap summaries, never source/spec bodies or process output.
+Frozen upstream verification collections may exceed the artifact's retained
+summary budget. Reduction therefore evaluates the complete collections and
+stores bounded selections alongside complete-set counts/digests, explicit
+omission counts, and blocker/gap classifications. Verifier provenance is an
+independent loader input rather than self-asserted serialized metadata.
+
+Confirmed semantic blockers and failed required verification classified as a
+change failure produce `NEEDS_CHANGES`, even when uncertainty also exists.
+Otherwise any required gap or non-PASS axis produces `INCONCLUSIVE`; only five
+PASS axes and complete required verification produce `READY`. Required execution
+gaps affect Test Sufficiency. A post-execution preservation failure remains
+separate from its actual result and invalidates all axis confidence. Structural
+floor entries have no execution by design and are summarized as satisfied unless
+their validated preservation signal records a gap.
+
+Markdown rendering is a pure projection of the canonical artifact. Exit mapping
+is determined from the artifact verdict (`0`, `1`, `2`) before rendering;
+preflight/no-review remains code `3` and creates no ReviewArtifact. This adds no
+command execution, runtime/model orchestration, provider policy, retrieval
+engine, language analysis, or V2/V3 integration.
+The default renderer applies its own smaller presentation selection, reports
+omitted counts and stable identities, and escapes untrusted prose onto one line
+so semantic text cannot forge headings or verdict text.
