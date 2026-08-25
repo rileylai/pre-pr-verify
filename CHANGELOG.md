@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.6 - 2026-08-25
+
+- Wire bounded model-proposed targeted checks into interactive planning and
+  authorization without changing execution authority.
+- Add deterministic, bounded requirement-candidate relevance recommendations
+  for human-attached setup, surfacing up to five same-precedence sources while
+  preserving the complete canonical candidate set and precedence.
+- Rank requirement relevance by source path, then label/title, then bounded
+  body content, with stable canonical tie-breaking.
+- Keep dependency/runtime provisioning and baseline-aware failure attribution
+  deferred; no ecosystem-specific behavior was added.
+
 ## 0.1.5 - 2026-08-25
 
 - Add `FILESYSTEM_ONLY` and bounded `GIT_REPOSITORY` execution profiles with

@@ -25,8 +25,8 @@ propagate into the axes and final verdict. The final verdict is `READY`,
 - **V2:** user-initiated GitHub PR review through GitHub MCP, with approval-gated top-level publication.
 - **V3:** authorized event trigger and deterministic inline mapping. MCP remains an integration interface, not the trigger.
 
-V1 is the implemented local product. The current public tagged version is
-`v0.1.5`. V2/V3 remain unimplemented. The repository's release-readiness checks
+V1 is the implemented local product. The current release candidate is
+`v0.1.6`; V2/V3 remain unimplemented. The repository's release-readiness checks
 cover the complete local workflow, installability, Skill instructions,
 acceptance scenarios, and self-hosting evidence.
 
@@ -73,6 +73,12 @@ authorization, review without execution, customization, or cancellation, and
 ends with one final confirmation. Repository requirements remain evidence, and
 repository commands never grant execution authority.
 
+When discovery finds many same-precedence winning requirement candidates,
+human-attached setup may surface up to five likely relevant sources using
+bounded deterministic relevance. This is presentation-only: the complete
+canonical candidate set and authority remain unchanged, and acknowledging a
+source is inspection/context only, not authoritative selection.
+
 The root `SKILL.md` is the full-review entrypoint. It orchestrates the canonical
 Python builders/loaders for ChangeSet, discovery, planning/execution,
 SemanticAssessment, ReviewArtifact, report, and exit semantics. The standalone
@@ -97,7 +103,7 @@ To validate the built core independently of the source checkout:
 ```sh
 uv venv /tmp/pre-pr-verify-install
 uv pip install --python /tmp/pre-pr-verify-install/bin/python \
-  dist/pre_pr_verify-0.1.5-py3-none-any.whl
+  dist/pre_pr_verify-0.1.6-py3-none-any.whl
 /tmp/pre-pr-verify-install/bin/python -c \
   "import pre_pr_verify; print(pre_pr_verify.__version__)"
 ```
