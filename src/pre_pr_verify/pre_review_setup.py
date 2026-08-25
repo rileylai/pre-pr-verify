@@ -159,39 +159,36 @@ class PreReviewSetup:
         candidates_by_id = {
             candidate.source_id: candidate for candidate in self.requirement_candidates
         }
-        recommended = tuple(
-            RequirementCandidate(
-                source_id=source_id,
-                label=candidates_by_id[source_id].label,
-                recommended=True,
+        recommended_ids = set(self._recommended_source_ids)
+
+        def presentation_candidate(candidate: RequirementCandidate) -> RequirementCandidate:
+            return RequirementCandidate(
+                source_id=candidate.source_id,
+                label=candidate.label,
+                recommended=candidate.source_id in recommended_ids,
             )
+
+        recommended = tuple(
+            presentation_candidate(candidates_by_id[source_id])
             for source_id in self._recommended_source_ids
         )
         remaining = tuple(
-            candidate
+            presentation_candidate(candidate)
             for candidate in self.requirement_candidates
-            if candidate.source_id not in self._recommended_source_ids
+            if candidate.source_id not in recommended_ids
         )
         presented = recommended + remaining
         if count > MAX_PRESENTED_REQUIREMENT_CANDIDATES:
-            presented = recommended
-        if count > MAX_PRESENTED_REQUIREMENT_CANDIDATES and not presented:
-            choices: tuple[NumberedChoice, ...] = (
-                NumberedChoice(1, "Enter explicit acceptance criteria", "provide-requirement"),
-                NumberedChoice(
-                    2,
-                    "Continue without authoritative requirements (Spec INCONCLUSIVE)",
-                    "continue-without-requirements",
-                ),
-                NumberedChoice(3, "Cancel", "cancel"),
-            )
-            return SetupStep(
-                phase=self.phase,
-                choices=choices,
-                candidate_count=count,
-                candidate_overflow=True,
-                other_candidate_count=count,
-            )
+            fallback_ids = {candidate.source_id for candidate in recommended}
+            overflow_presented = list(recommended)
+            for candidate in self.requirement_candidates:
+                if len(overflow_presented) == MAX_RECOMMENDED_REQUIREMENT_CANDIDATES:
+                    break
+                if candidate.source_id in fallback_ids:
+                    continue
+                overflow_presented.append(presentation_candidate(candidate))
+                fallback_ids.add(candidate.source_id)
+            presented = tuple(overflow_presented)
 
         candidate_choices = tuple(
             NumberedChoice(

@@ -17,6 +17,20 @@ def candidates(count: int) -> list[RequirementCandidate]:
     ]
 
 
+def candidates_with_recommendation_flags(
+    count: int,
+    flagged_indices: set[int],
+) -> list[RequirementCandidate]:
+    return [
+        RequirementCandidate(
+            source_id=f"{index:064x}",
+            label=f"Requirement {index}",
+            recommended=index in flagged_indices,
+        )
+        for index in range(count)
+    ]
+
+
 def test_numeric_setup_advances_one_required_phase_at_a_time() -> None:
     setup = PreReviewSetup(
         interactive=True,
@@ -143,7 +157,7 @@ def test_requirement_choices_are_configured_only_after_scope_discovery() -> None
         setup.set_requirement_candidates(candidates(1))
 
 
-def test_thirty_four_candidates_are_reported_without_truncation_or_auto_selection() -> None:
+def test_thirty_four_candidates_without_recommendations_show_canonical_fallbacks() -> None:
     setup = PreReviewSetup(
         interactive=True,
         requirement_candidates=candidates(34),
@@ -155,16 +169,133 @@ def test_thirty_four_candidates_are_reported_without_truncation_or_auto_selectio
     assert step.phase is SetupPhase.REQUIREMENTS
     assert step.candidate_count == 34
     assert step.candidate_overflow is True
-    assert step.presented_candidates == ()
+    assert [candidate.source_id for candidate in step.presented_candidates] == [
+        f"{index:064x}" for index in range(5)
+    ]
+    assert [candidate.recommended for candidate in step.presented_candidates] == [
+        False
+    ] * 5
+    assert step.recommended_candidate_count == 0
+    assert step.other_candidate_count == 29
     assert [choice.value for choice in step.choices] == [
+        *(f"accept:{index:064x}" for index in range(5)),
         "provide-requirement",
         "continue-without-requirements",
         "cancel",
     ]
+    assert all("[Recommended]" not in choice.label for choice in step.choices[:5])
 
-    setup.submit("1", detail="The change must preserve the public API.")
+    setup.submit("6", detail="The change must preserve the public API.")
     assert setup.phase is SetupPhase.VERIFICATION
     assert setup.requirement_selection == "provided-requirement"
+
+
+def test_caller_recommendation_flag_cannot_mark_an_overflow_fallback() -> None:
+    setup = PreReviewSetup(
+        interactive=True,
+        requirement_candidates=candidates_with_recommendation_flags(34, {0}),
+        recommended_source_ids=(),
+        recommended_scope_number=1,
+    )
+
+    setup.submit("1")
+    step = setup.current_step()
+
+    assert [candidate.recommended for candidate in step.presented_candidates] == [
+        False
+    ] * 5
+    assert all("[Recommended]" not in choice.label for choice in step.choices[:5])
+    assert step.recommended_candidate_count == 0
+
+
+def test_recommendation_membership_is_the_only_overflow_marker_authority() -> None:
+    values = candidates_with_recommendation_flags(34, {0, 17})
+    setup = PreReviewSetup(
+        interactive=True,
+        requirement_candidates=values,
+        recommended_source_ids=(values[17].source_id,),
+        recommended_scope_number=1,
+    )
+
+    setup.submit("1")
+    step = setup.current_step()
+
+    assert [candidate.source_id for candidate in step.presented_candidates] == [
+        values[index].source_id for index in (17, 0, 1, 2, 3)
+    ]
+    assert [candidate.recommended for candidate in step.presented_candidates] == [
+        True,
+        False,
+        False,
+        False,
+        False,
+    ]
+    assert "[Recommended]" in step.choices[0].label
+    assert all("[Recommended]" not in choice.label for choice in step.choices[1:5])
+    assert step.recommended_candidate_count == 1
+
+
+def test_overflow_fills_four_canonical_fallbacks_after_one_recommendation() -> None:
+    values = candidates(34)
+    recommended = (values[17].source_id,)
+    setup = PreReviewSetup(
+        interactive=True,
+        requirement_candidates=values,
+        recommended_source_ids=recommended,
+        recommended_scope_number=1,
+    )
+
+    setup.submit("1")
+    step = setup.current_step()
+
+    assert [candidate.source_id for candidate in step.presented_candidates] == [
+        values[index].source_id for index in (17, 0, 1, 2, 3)
+    ]
+    assert [candidate.recommended for candidate in step.presented_candidates] == [
+        True,
+        False,
+        False,
+        False,
+        False,
+    ]
+    assert step.candidate_count == 34
+    assert step.recommended_candidate_count == 1
+    assert step.other_candidate_count == 29
+    assert "[Recommended]" in step.choices[0].label
+    assert all("[Recommended]" not in choice.label for choice in step.choices[1:5])
+    assert tuple(candidate.source_id for candidate in setup.requirement_candidates) == tuple(
+        candidate.source_id for candidate in values
+    )
+
+
+def test_overflow_preserves_recommendation_order_then_fills_canonical_order() -> None:
+    values = candidates(34)
+    recommended = (values[17].source_id, values[2].source_id, values[29].source_id)
+    setup = PreReviewSetup(
+        interactive=True,
+        requirement_candidates=values,
+        recommended_source_ids=recommended,
+        recommended_scope_number=1,
+    )
+
+    setup.submit("1")
+    step = setup.current_step()
+
+    assert [candidate.source_id for candidate in step.presented_candidates] == [
+        values[index].source_id for index in (17, 2, 29, 0, 1)
+    ]
+    assert [candidate.recommended for candidate in step.presented_candidates] == [
+        True,
+        True,
+        True,
+        False,
+        False,
+    ]
+    assert step.candidate_count == 34
+    assert step.recommended_candidate_count == 3
+    assert step.other_candidate_count == 29
+    assert all("[Recommended]" in choice.label for choice in step.choices[:3])
+    assert all("[Recommended]" not in choice.label for choice in step.choices[3:5])
 
 
 def test_recommended_candidates_are_bounded_and_keep_the_full_candidate_set() -> None:
@@ -205,6 +336,49 @@ def test_recommended_candidates_are_bounded_and_keep_the_full_candidate_set() ->
     )
 
 
+def test_small_candidate_sets_keep_the_existing_full_presentation() -> None:
+    values = candidates(16)
+    recommended = (values[8].source_id, values[2].source_id)
+    setup = PreReviewSetup(
+        interactive=True,
+        requirement_candidates=values,
+        recommended_source_ids=recommended,
+        recommended_scope_number=1,
+    )
+
+    setup.submit("1")
+    step = setup.current_step()
+
+    assert step.candidate_overflow is False
+    assert step.candidate_count == 16
+    assert step.recommended_candidate_count == 2
+    assert step.other_candidate_count == 0
+    assert [candidate.source_id for candidate in step.presented_candidates] == [
+        values[index].source_id for index in (8, 2, 0, 1, *range(3, 8), *range(9, 16))
+    ]
+
+
+def test_small_candidate_markers_come_only_from_recommendation_ids() -> None:
+    values = candidates_with_recommendation_flags(16, {0, 8})
+    setup = PreReviewSetup(
+        interactive=True,
+        requirement_candidates=values,
+        recommended_source_ids=(values[8].source_id,),
+        recommended_scope_number=1,
+    )
+
+    setup.submit("1")
+    step = setup.current_step()
+
+    assert step.presented_candidates[0].source_id == values[8].source_id
+    assert step.presented_candidates[0].recommended is True
+    assert step.presented_candidates[1].source_id == values[0].source_id
+    assert step.presented_candidates[1].recommended is False
+    assert step.recommended_candidate_count == 1
+    assert "[Recommended]" in step.choices[0].label
+    assert "[Recommended]" not in step.choices[1].label
+
+
 def test_headless_recommendation_never_becomes_an_implicit_selection() -> None:
     values = candidates(34)
     setup = PreReviewSetup(
@@ -229,5 +403,5 @@ def test_provided_requirement_requires_brief_criteria() -> None:
     )
     setup.submit("1")
     with pytest.raises(PreflightError, match="criteria"):
-        setup.submit("1")
+        setup.submit("6")
     assert setup.phase is SetupPhase.REQUIREMENTS

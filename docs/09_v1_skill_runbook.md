@@ -198,10 +198,13 @@ recommendation.
 
 The coordinator keeps the complete candidate tuple and count. It presents
 recommended candidates first when available, marks them as recommended, and
-reports the remaining same-authority candidate count. When more than the
-presentation bound can be shown, only the bounded recommended subset is put in
-the numbered choices; if there is no recommendation, the existing explicit
-criteria/continue/cancel choices remain. No candidate is silently deleted.
+reports the remaining same-authority candidate count. For an overflow set,
+unused presentation slots are filled, up to five total candidates, from the
+complete canonical candidate order. These fallback candidates are not marked
+as recommended. With no recommendation, the first canonical candidates fill
+the bounded presentation before the explicit criteria/continue/cancel actions.
+No candidate is silently deleted, and the full canonical candidate set remains
+available for semantic review.
 
 The human-facing actions are:
 
@@ -217,13 +220,12 @@ still compare every winning candidate as required by the frozen contract.
 Explicit criteria are passed as `ProvidedRequirement` and discovery is reloaded
 at explicit precedence. Do not infer requirements from implementation code,
 tests, or comments merely to obtain `PASS`. A candidate set that cannot be
-displayed within the bounded setup limit must not be silently truncated; offer
-explicit criteria, an explicit missing-requirements decision, or cancel.
-`PreReviewSetup` exposes the complete candidate count and an overflow flag in
-this case. If a recommendation is available, it presents that bounded subset
-plus the same explicit criteria/continue/cancel actions; without a
-recommendation it exposes only those three actions. The full discovery
-candidate set remains unchanged.
+fully displayed within the bounded setup limit remains complete internally;
+the explicit bounded inspection projection exposes its full count and overflow
+state, then offers up to five candidates plus explicit criteria, an explicit
+missing-requirements decision, or cancel. Recommendations come first and
+canonical fallbacks fill unused slots. The full discovery candidate set
+remains unchanged.
 In headless mode, the recommendation is display metadata only; an explicit
 structured requirement answer is still required and no source is selected
 implicitly.

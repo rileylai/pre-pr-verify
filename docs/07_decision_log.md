@@ -345,3 +345,8 @@ implicit selection. Repository prose, including prompt-injection text, is data
 used only by the bounded presentation heuristic; it cannot grant authority,
 execution permission, or reducer behavior. No language/framework matrix,
 embedding search, dependency graph, or external search service is introduced.
+When the winning set exceeds the presentation bound, recommended entries are
+shown first and unused slots up to five total are filled from canonical
+candidate order without a recommendation marker. A zero-recommendation
+overflow therefore still exposes the first canonical candidates for inspection;
+the complete candidate set and its count remain unchanged.
