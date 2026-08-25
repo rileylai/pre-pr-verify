@@ -323,3 +323,25 @@ Git or repository/config escape forms before execution. Indirect commands remain
 opaque and retain their real child outcomes. Existing ChangeSet, reducer,
 capability, budget, and authority-separation semantics are unchanged. History,
 tags, remotes, submodules, and LFS remain deferred.
+
+## ADR-031: Bounded requirement relevance above frozen discovery
+
+**Status:** Accepted
+
+When discovery returns many same-precedence requirement candidates, the
+Skill/orchestration layer may derive a small presentation recommendation from
+the already captured ChangeSet and bound DiscoveryResult. The recommendation is
+deterministic and generic: it uses bounded lexical overlap from changed paths
+and safely captured text against candidate path, label, and bounded content,
+with path matches ranked above label matches, label matches ranked above body
+matches, and canonical candidate order as the tie-break. It returns at most five
+source IDs and has no persisted artifact or authority semantics.
+
+The complete winning `candidate_source_ids`, precedence, DiscoveryResult
+identity, and semantic equal-precedence reconciliation remain unchanged. The
+coordinator retains the full candidate tuple and count, labels recommended
+entries as inspection context, and never turns a recommendation into an
+implicit selection. Repository prose, including prompt-injection text, is data
+used only by the bounded presentation heuristic; it cannot grant authority,
+execution permission, or reducer behavior. No language/framework matrix,
+embedding search, dependency graph, or external search service is introduced.

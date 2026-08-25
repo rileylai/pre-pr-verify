@@ -167,6 +167,60 @@ def test_thirty_four_candidates_are_reported_without_truncation_or_auto_selectio
     assert setup.requirement_selection == "provided-requirement"
 
 
+def test_recommended_candidates_are_bounded_and_keep_the_full_candidate_set() -> None:
+    values = candidates(34)
+    recommended = [
+        values[17].source_id,
+        values[2].source_id,
+        values[29].source_id,
+        values[6].source_id,
+        values[24].source_id,
+    ]
+    setup = PreReviewSetup(
+        interactive=True,
+        requirement_candidates=values,
+        recommended_source_ids=recommended,
+        recommended_scope_number=1,
+    )
+
+    setup.submit("1")
+    step = setup.current_step()
+
+    assert step.candidate_count == 34
+    assert step.candidate_overflow is True
+    assert step.recommended_candidate_count == 5
+    assert step.other_candidate_count == 29
+    assert [candidate.source_id for candidate in step.presented_candidates] == recommended
+    assert all(candidate.recommended for candidate in step.presented_candidates)
+    assert [choice.value for choice in step.choices[:5]] == [
+        f"accept:{source_id}" for source_id in recommended
+    ]
+    assert "[Recommended]" in step.choices[0].label
+
+    setup.submit("1")
+    assert setup.requirement_selection == "accepted-discovered-source"
+    assert setup.requirement_detail == recommended[0]
+    assert tuple(candidate.source_id for candidate in setup.requirement_candidates) == tuple(
+        candidate.source_id for candidate in values
+    )
+
+
+def test_headless_recommendation_never_becomes_an_implicit_selection() -> None:
+    values = candidates(34)
+    setup = PreReviewSetup(
+        interactive=False,
+        requirement_candidates=values,
+        recommended_source_ids=(values[0].source_id,),
+    )
+    setup.submit("1", detail="working scope")
+
+    assert setup.requirement_selection is None
+    assert setup.current_step().presented_candidates[0].recommended is True
+    with pytest.raises(PreflightError, match="headless.*requirements"):
+        setup.submit(None)
+    assert setup.requirement_selection is None
+
+
 def test_provided_requirement_requires_brief_criteria() -> None:
     setup = PreReviewSetup(
         interactive=True,

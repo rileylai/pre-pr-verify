@@ -51,6 +51,7 @@ from pre_pr_verify.pre_review_setup import (
     RequirementCandidate,
     SetupPhase,
 )
+from pre_pr_verify.requirement_relevance import recommend_requirement_source_ids
 from pre_pr_verify.verification import (
     PlannerCheckInput,
     TrustedPolicyCheckInput,
@@ -174,25 +175,58 @@ changes the ChangeSet boundary.
 
 After scope confirmation and capture, but before semantic inspection, call
 `discover_review_sources` and show its authoritative winning requirement
-candidate set and precedence in a bounded numbered chooser. The actions are:
+candidate set and precedence in a bounded numbered chooser. Build the complete
+`RequirementCandidate` set from `requirement_resolution.candidate_source_ids`.
+For human-attached setup with multiple winning candidates, derive a bounded
+presentation recommendation and pass only its source IDs to the coordinator:
 
-1. accept one discovered winning source for inspection;
+```python
+recommended_source_ids = recommend_requirement_source_ids(changeset, discovery)
+setup.set_requirement_candidates(
+    requirement_candidates,
+    recommended_source_ids=recommended_source_ids,
+)
+```
+
+The recommendation examines at most 256 winning candidates, returns at most
+five source IDs, and uses deterministic lexical overlap between bounded
+changed paths/safely captured text and candidate path/label/content. Candidate
+path matches outrank label/title matches, which outrank body/content matches;
+the canonical DiscoveryResult candidate order breaks remaining ties. Zero or
+one candidate, no useful overlap, or insufficient bounded evidence produces no
+recommendation.
+
+The coordinator keeps the complete candidate tuple and count. It presents
+recommended candidates first when available, marks them as recommended, and
+reports the remaining same-authority candidate count. When more than the
+presentation bound can be shown, only the bounded recommended subset is put in
+the numbered choices; if there is no recommendation, the existing explicit
+criteria/continue/cancel choices remain. No candidate is silently deleted.
+
+The human-facing actions are:
+
+1. acknowledge one discovered winning source for inspection/context;
 2. enter brief explicit acceptance criteria;
 3. continue without authoritative requirements, with a visible warning that
    Spec will remain `INCONCLUSIVE`;
 4. cancel.
 
-If there are multiple winning candidates, accepting one is a UI acknowledgement,
-not a replacement of the candidate set or a precedence change. Semantic review
-must still compare every winning candidate as required by the frozen contract.
+Acknowledging a recommended source is not a selection of authority, a
+replacement of the candidate set, or a precedence change. Semantic review must
+still compare every winning candidate as required by the frozen contract.
 Explicit criteria are passed as `ProvidedRequirement` and discovery is reloaded
 at explicit precedence. Do not infer requirements from implementation code,
 tests, or comments merely to obtain `PASS`. A candidate set that cannot be
 displayed within the bounded setup limit must not be silently truncated; offer
 explicit criteria, an explicit missing-requirements decision, or cancel.
 `PreReviewSetup` exposes the complete candidate count and an overflow flag in
-this case, presents no misleading candidate subset, and exposes only those
-three legal actions. The full discovery candidate set remains unchanged.
+this case. If a recommendation is available, it presents that bounded subset
+plus the same explicit criteria/continue/cancel actions; without a
+recommendation it exposes only those three actions. The full discovery
+candidate set remains unchanged.
+In headless mode, the recommendation is display metadata only; an explicit
+structured requirement answer is still required and no source is selected
+implicitly.
 
 ### Targeted verification planning
 

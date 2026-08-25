@@ -28,7 +28,10 @@ sequence.
 1. Resolve and preview an explicit scope from bounded Git metadata. Only after
    human confirmation, capture the complete pending `ChangeSet`; stop on
    cancellation, preflight, or no-review.
-2. Discover bounded requirement and Standards evidence.
+2. Discover bounded requirement and Standards evidence. When human-attached
+   setup has many winning candidates, derive only a bounded presentation
+   recommendation from the captured ChangeSet and DiscoveryResult; the full
+   canonical candidate set and its authority remain unchanged.
 3. Inspect bounded impact/test/tooling evidence, add only justified
    model-proposed targeted checks, then build the complete plan and show it
    before authorization.

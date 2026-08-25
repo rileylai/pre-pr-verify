@@ -11,6 +11,7 @@ from pre_pr_verify.scope_intent import ResolvedScope, resolved_scope_identity
 
 MAX_PRESENTED_REQUIREMENT_CANDIDATES: Final = 16
 MAX_REQUIREMENT_CANDIDATES: Final = 256
+MAX_RECOMMENDED_REQUIREMENT_CANDIDATES: Final = 5
 MAX_SETUP_DETAIL_CHARS: Final = 4_096
 MAX_CHOICE_LABEL_CHARS: Final = 256
 
@@ -43,6 +44,7 @@ class NumberedChoice:
 class RequirementCandidate:
     source_id: str
     label: str
+    recommended: bool = False
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[0-9a-f]{64}", self.source_id) or not (
@@ -59,6 +61,8 @@ class SetupStep:
     presented_candidates: tuple[RequirementCandidate, ...] = ()
     candidate_count: int = 0
     candidate_overflow: bool = False
+    recommended_candidate_count: int = 0
+    other_candidate_count: int = 0
 
 
 _SCOPE_CHOICES = (
@@ -94,6 +98,7 @@ class PreReviewSetup:
         | tuple[RequirementCandidate, ...]
         | None = None,
         recommended_scope_number: int | None = None,
+        recommended_source_ids: list[str] | tuple[str, ...] = (),
     ) -> None:
         candidates = tuple(requirement_candidates or ())
         if len(candidates) > MAX_REQUIREMENT_CANDIDATES:
@@ -107,6 +112,10 @@ class PreReviewSetup:
         self.interactive = interactive
         self.requirement_candidates = candidates
         self._requirements_configured = requirement_candidates is not None
+        self._recommended_source_ids = self._validate_recommendations(
+            candidates,
+            recommended_source_ids,
+        )
         self.recommended_scope_number = recommended_scope_number
         self._phase = SetupPhase.SCOPE
         self.scope_selection: str | None = None
@@ -117,6 +126,21 @@ class PreReviewSetup:
         self.verification_detail: str | None = None
         self._confirmed_scope: ResolvedScope | None = None
         self._confirmed_scope_identity: str | None = None
+
+    @staticmethod
+    def _validate_recommendations(
+        candidates: tuple[RequirementCandidate, ...],
+        source_ids: list[str] | tuple[str, ...],
+    ) -> tuple[str, ...]:
+        values = tuple(source_ids)
+        if len(values) > MAX_RECOMMENDED_REQUIREMENT_CANDIDATES:
+            raise ValueError("requirement recommendation exceeds the setup bound")
+        if len(set(values)) != len(values):
+            raise ValueError("requirement recommendation IDs must be unique")
+        candidate_ids = {candidate.source_id for candidate in candidates}
+        if not set(values) <= candidate_ids:
+            raise ValueError("requirement recommendation references an unknown source")
+        return values
 
     @property
     def review_started(self) -> bool:
@@ -132,7 +156,26 @@ class PreReviewSetup:
                 "requirement discovery must configure setup before selection"
             )
         count = len(self.requirement_candidates)
+        candidates_by_id = {
+            candidate.source_id: candidate for candidate in self.requirement_candidates
+        }
+        recommended = tuple(
+            RequirementCandidate(
+                source_id=source_id,
+                label=candidates_by_id[source_id].label,
+                recommended=True,
+            )
+            for source_id in self._recommended_source_ids
+        )
+        remaining = tuple(
+            candidate
+            for candidate in self.requirement_candidates
+            if candidate.source_id not in self._recommended_source_ids
+        )
+        presented = recommended + remaining
         if count > MAX_PRESENTED_REQUIREMENT_CANDIDATES:
+            presented = recommended
+        if count > MAX_PRESENTED_REQUIREMENT_CANDIDATES and not presented:
             choices: tuple[NumberedChoice, ...] = (
                 NumberedChoice(1, "Enter explicit acceptance criteria", "provide-requirement"),
                 NumberedChoice(
@@ -147,11 +190,16 @@ class PreReviewSetup:
                 choices=choices,
                 candidate_count=count,
                 candidate_overflow=True,
+                other_candidate_count=count,
             )
 
         candidate_choices = tuple(
-            NumberedChoice(index, candidate.label, f"accept:{candidate.source_id}")
-            for index, candidate in enumerate(self.requirement_candidates, start=1)
+            NumberedChoice(
+                index,
+                self._candidate_choice_label(candidate),
+                f"accept:{candidate.source_id}",
+            )
+            for index, candidate in enumerate(presented, start=1)
         )
         next_number = len(candidate_choices) + 1
         choices = candidate_choices + (
@@ -166,13 +214,24 @@ class PreReviewSetup:
         return SetupStep(
             phase=self.phase,
             choices=choices,
-            presented_candidates=self.requirement_candidates,
+            presented_candidates=presented,
             candidate_count=count,
+            candidate_overflow=count > MAX_PRESENTED_REQUIREMENT_CANDIDATES,
+            recommended_candidate_count=len(recommended),
+            other_candidate_count=count - len(presented),
         )
+
+    @staticmethod
+    def _candidate_choice_label(candidate: RequirementCandidate) -> str:
+        marker = " [Recommended]" if candidate.recommended else ""
+        label = f"Acknowledge for inspection: {candidate.label}{marker}"
+        return label[:MAX_CHOICE_LABEL_CHARS]
 
     def set_requirement_candidates(
         self,
         candidates: list[RequirementCandidate] | tuple[RequirementCandidate, ...],
+        *,
+        recommended_source_ids: list[str] | tuple[str, ...] = (),
     ) -> None:
         if self.phase is not SetupPhase.REQUIREMENTS or self._requirements_configured:
             raise PreReviewSetupError(
@@ -184,6 +243,10 @@ class PreReviewSetup:
         if len({candidate.source_id for candidate in values}) != len(values):
             raise ValueError("requirement candidate identities must be unique")
         self.requirement_candidates = values
+        self._recommended_source_ids = self._validate_recommendations(
+            values,
+            recommended_source_ids,
+        )
         self._requirements_configured = True
 
     def current_step(self) -> SetupStep:

@@ -135,7 +135,7 @@ def test_numeric_setup_forward_path_covers_representative_narrow_review() -> Non
 
     requirement_section = runbook[runbook.index("### Requirement setup") :]
     verification_section = runbook[runbook.index("### Verification authorization setup") :]
-    assert "accept one discovered winning source" in requirement_section
+    assert "acknowledge one discovered winning source" in requirement_section
     assert "explicit acceptance criteria" in requirement_section
     assert "Spec will remain `INCONCLUSIVE`" in requirement_section
     assert "implementation code" in requirement_section
