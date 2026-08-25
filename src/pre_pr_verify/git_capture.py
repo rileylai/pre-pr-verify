@@ -5,6 +5,7 @@ import hashlib
 import os
 import stat
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
@@ -74,8 +75,8 @@ class GitRunner:
     def __init__(self, repository: Path):
         self.repository = repository
 
-    def run(self, args: Sequence[str], *, check: bool = True) -> bytes:
-        environment = {
+    def _environment(self) -> dict[str, str]:
+        return {
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
             "LANG": "C",
             "LC_ALL": "C",
@@ -85,8 +86,12 @@ class GitRunner:
             "GIT_TERMINAL_PROMPT": "0",
             "GIT_PAGER": "cat",
             "PAGER": "cat",
+            "GIT_OPTIONAL_LOCKS": "0",
         }
-        command = [
+
+    @staticmethod
+    def _command(args: Sequence[str]) -> list[str]:
+        return [
             "git",
             "--no-pager",
             "-c",
@@ -97,10 +102,12 @@ class GitRunner:
             "core.filemode=true",
             *args,
         ]
+
+    def run(self, args: Sequence[str], *, check: bool = True) -> bytes:
         result = subprocess.run(
-            command,
+            self._command(args),
             cwd=self.repository,
-            env=environment,
+            env=self._environment(),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -110,6 +117,69 @@ class GitRunner:
             message = result.stderr.decode("utf-8", "backslashreplace").strip()
             raise PreflightError(message or f"Git command failed: {args[0]}")
         return result.stdout
+
+    def batch_cat_file(self, object_ids: Sequence[str]) -> dict[str, tuple[str, bytes]]:
+        """Read a bounded object set through one hardened Git plumbing process."""
+
+        if not object_ids:
+            return {}
+        process = subprocess.Popen(
+            self._command(["cat-file", "--batch"]),
+            cwd=self.repository,
+            env=self._environment(),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert process.stdin is not None
+        assert process.stdout is not None
+        assert process.stderr is not None
+        stdin = process.stdin
+        request_data = b"".join(
+            object_id.encode("ascii") + b"\n" for object_id in object_ids
+        )
+
+        def send_requests() -> None:
+            try:
+                stdin.write(request_data)
+                stdin.close()
+            except BrokenPipeError:
+                pass
+
+        sender = threading.Thread(target=send_requests, daemon=True)
+        sender.start()
+        try:
+            result: dict[str, tuple[str, bytes]] = {}
+            for requested in object_ids:
+                header = process.stdout.readline()
+                if not header:
+                    raise PreflightError("Git batch object read ended unexpectedly")
+                fields = header.rstrip(b"\n").split(b" ")
+                if len(fields) < 2 or fields[0].decode("ascii", "strict") != requested:
+                    raise PreflightError("Git batch object response is inconsistent")
+                if fields[1] == b"missing":
+                    raise PreflightError(f"Git object is missing: {requested}")
+                if len(fields) != 3:
+                    raise PreflightError("Git batch object response is malformed")
+                kind = fields[1].decode("ascii", "strict")
+                try:
+                    size = int(fields[2])
+                except ValueError as error:
+                    raise PreflightError("Git batch object size is malformed") from error
+                data = process.stdout.read(size)
+                if len(data) != size or process.stdout.read(1) != b"\n":
+                    raise PreflightError("Git batch object payload is truncated")
+                result[requested] = (kind, data)
+            returncode = process.wait()
+            if returncode != 0:
+                message = process.stderr.read().decode("utf-8", "backslashreplace").strip()
+                raise PreflightError(message or "Git batch object read failed")
+            return result
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+            sender.join(timeout=1)
 
 
 class _DisjointSet:
@@ -658,26 +728,80 @@ def _is_binary(data: bytes) -> bool:
     return b"\x00" in data[:8192]
 
 
-def _metadata_fingerprint(runner: GitRunner, git_reader: _RootedReader) -> tuple[str, str]:
+def _resolved_git_path(runner: GitRunner, *arguments: str) -> bytes:
+    path = runner.run(["rev-parse", *arguments]).rstrip(b"\n")
+    if not path or b"\x00" in path:
+        raise PreflightError(f"Git path is invalid: {' '.join(arguments)}")
+    if not os.path.isabs(path):
+        path = os.path.normpath(os.path.join(os.fsencode(runner.repository), path))
+    return path
+
+
+def _git_metadata_digest(
+    runner: GitRunner,
+    git_path: str,
+    readers: tuple[_RootedReader, ...],
+    label: str,
+) -> str | None:
+    path = _resolved_git_path(runner, "--git-path", git_path)
+    for reader in readers:
+        root = os.fsencode(reader.root)
+        try:
+            common = os.path.commonpath((root, path))
+        except ValueError:
+            continue
+        if common != root:
+            continue
+        relative = os.path.relpath(path, root).replace(os.sep.encode(), b"/")
+        if relative in (b".", b"..") or relative.startswith(b"../"):
+            continue
+        try:
+            return reader.digest_file(relative)
+        except PreflightError as error:
+            raise PreflightError(f"{label} cannot be read safely") from error
+    raise PreflightError(f"{label} escapes the Git metadata roots")
+
+
+def _metadata_fingerprint(
+    runner: GitRunner, git_reader: _RootedReader
+) -> tuple[str, str, str | None, str | None]:
     head = _resolve_commit(runner, "HEAD")
-    index_path_raw = runner.run(["rev-parse", "--git-path", "index"]).rstrip(b"\n")
-    if not os.path.isabs(index_path_raw):
-        index_path_raw = os.path.normpath(
-            os.path.join(os.fsencode(runner.repository), index_path_raw)
-        )
-    git_root = os.fsencode(git_reader.root)
-    if os.path.commonpath((git_root, index_path_raw)) != git_root:
-        raise PreflightError("Git index escapes the Git metadata root")
-    index_relative = os.path.relpath(index_path_raw, git_root).replace(
-        os.sep.encode(), b"/"
+    index_digest = _git_metadata_digest(
+        runner,
+        "index",
+        (git_reader,),
+        "Git index",
     )
-    try:
-        index_digest = git_reader.digest_file(index_relative)
-    except PreflightError as error:
-        raise PreflightError("Git index cannot be read safely") from error
     if index_digest is None:
         index_digest = hashlib.sha256(b"").hexdigest()
-    return head, index_digest
+    common_directory = Path(
+        os.fsdecode(_resolved_git_path(runner, "--git-common-dir"))
+    ).resolve()
+    common_reader = _RootedReader(common_directory, "common Git metadata")
+    config_readers = (git_reader, common_reader)
+    config_digest = _git_metadata_digest(
+        runner,
+        "config",
+        config_readers,
+        "Git config",
+    )
+    worktree_config_digest = _git_metadata_digest(
+        runner,
+        "config.worktree",
+        config_readers,
+        "Git worktree config",
+    )
+    return head, index_digest, config_digest, worktree_config_digest
+
+
+def source_preservation_fingerprint(
+    repository: Path | str,
+) -> tuple[str, str, str | None, str | None]:
+    _root, runner = _resolve_repository(Path(repository))
+    git_directory = Path(
+        os.fsdecode(runner.run(["rev-parse", "--absolute-git-dir"]).rstrip(b"\n"))
+    ).resolve()
+    return _metadata_fingerprint(runner, _RootedReader(git_directory, "Git metadata"))
 
 
 def _same_state(left: _RawState, right: _RawState) -> bool:

@@ -10,7 +10,8 @@ from pydantic import Field, model_validator
 from pre_pr_verify.models import FrozenModel, RawPath, SHA256_PATTERN
 
 
-VERIFICATION_SCHEMA_VERSION = "1.0.0"
+LEGACY_VERIFICATION_SCHEMA_VERSION = "1.0.0"
+VERIFICATION_SCHEMA_VERSION = "1.1.0"
 
 
 class RequirementLevel(StrEnum):
@@ -40,6 +41,72 @@ class CapabilityName(StrEnum):
     NETWORK_ISOLATION = "network_isolation"
     RESOURCE_LIMITS = "resource_limits"
     PROCESS_ISOLATION = "process_isolation"
+
+
+class EnvironmentProfile(StrEnum):
+    FILESYSTEM_ONLY = "FILESYSTEM_ONLY"
+    GIT_REPOSITORY = "GIT_REPOSITORY"
+
+
+class GitObjectFormat(StrEnum):
+    SHA1 = "sha1"
+    SHA256 = "sha256"
+
+
+class ProfileProvenanceChannel(StrEnum):
+    REPOSITORY_DECLARATION = "repository_declaration"
+    TRUSTED_POLICY = "trusted_policy"
+    MODEL_PROPOSAL = "model_proposal"
+    USER_INVOCATION = "user_invocation"
+
+
+_ENVIRONMENT_PROFILE_ORDER = {
+    EnvironmentProfile.FILESYSTEM_ONLY: 0,
+    EnvironmentProfile.GIT_REPOSITORY: 1,
+}
+_PROFILE_PROVENANCE_CHANNEL_ORDER = {
+    ProfileProvenanceChannel.REPOSITORY_DECLARATION: 0,
+    ProfileProvenanceChannel.TRUSTED_POLICY: 1,
+    ProfileProvenanceChannel.MODEL_PROPOSAL: 2,
+    ProfileProvenanceChannel.USER_INVOCATION: 3,
+}
+
+
+class ProfileProvenance(FrozenModel):
+    channel: ProfileProvenanceChannel
+    requested_profile: EnvironmentProfile
+    source_sha256: str = Field(pattern=SHA256_PATTERN)
+
+
+def resolve_profile_provenance(
+    entries: list[ProfileProvenance],
+) -> tuple[EnvironmentProfile, list[ProfileProvenance]]:
+    """Resolve the bounded profile raisers without planner integration."""
+
+    channels = [entry.channel for entry in entries]
+    if len(channels) != len(set(channels)):
+        raise ValueError("profile provenance channels must be unique")
+    resolved = max(
+        (entry.requested_profile for entry in entries),
+        key=lambda profile: _ENVIRONMENT_PROFILE_ORDER[profile],
+        default=EnvironmentProfile.FILESYSTEM_ONLY,
+    )
+    retained = [
+        entry for entry in entries if entry.requested_profile is resolved
+    ]
+    retained.sort(key=lambda entry: _PROFILE_PROVENANCE_CHANNEL_ORDER[entry.channel])
+    return resolved, retained
+
+
+def validate_profile_provenance(
+    profile: EnvironmentProfile,
+    entries: list[ProfileProvenance],
+) -> None:
+    resolved, retained = resolve_profile_provenance(entries)
+    if resolved is not profile:
+        raise ValueError("profile provenance does not resolve to environment profile")
+    if entries != retained:
+        raise ValueError("profile provenance is not canonically ordered or retained")
 
 
 class DecisionKind(StrEnum):
@@ -103,9 +170,15 @@ class PlannedCheck(FrozenModel):
     source_size: int | None = Field(default=None, ge=0)
     trusted_policy_label: str | None = Field(default=None, min_length=1)
     trusted_policy_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
+    environment_profile: EnvironmentProfile = EnvironmentProfile.FILESYSTEM_ONLY
+    profile_provenance: list[ProfileProvenance] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_check(self) -> PlannedCheck:
+        validate_profile_provenance(
+            self.environment_profile,
+            self.profile_provenance,
+        )
         if self.kind is CheckKind.COMMAND:
             if not self.argv or any(not value or "\x00" in value for value in self.argv):
                 raise ValueError("command check requires structured non-empty argv")
@@ -147,7 +220,7 @@ class PlannedCheck(FrozenModel):
 
 class VerificationPlan(FrozenModel):
     contract: Literal["verification_plan"] = "verification_plan"
-    schema_version: Literal["1.0.0"] = "1.0.0"
+    schema_version: Literal["1.1.0"] = "1.1.0"
     changeset_identity: str = Field(pattern=SHA256_PATTERN)
     discovery_identity: str = Field(pattern=SHA256_PATTERN)
     signals: ChangeSignals
@@ -195,6 +268,7 @@ class ExecutionRequest(FrozenModel):
     timeout_seconds: float = Field(gt=0, le=3600)
     output_limit_bytes: int = Field(gt=0, le=16_777_216)
     required_capabilities: list[CapabilityName]
+    environment_profile: EnvironmentProfile = EnvironmentProfile.FILESYSTEM_ONLY
     nonzero_failure_kind: FailureKind = FailureKind.VERIFICATION
     cwd_validation_failure: FailureKind | None = None
     snapshot_validation_failure: FailureKind | None = None
@@ -293,7 +367,8 @@ _NON_WAIVABLE_INVARIANTS = (
 
 
 def derive_execution_decision(
-    request: ExecutionRequest, capability: ExecutionCapability
+    request: ExecutionRequest | LegacyExecutionRequest,
+    capability: ExecutionCapability,
 ) -> ExecutionDecision:
     if request.cwd_validation_failure is not None:
         return ExecutionDecision(
@@ -478,6 +553,8 @@ class SnapshotManifest(FrozenModel):
     materialization_ordinal: int = Field(ge=0)
     changeset_identity: str = Field(pattern=SHA256_PATTERN)
     discovery_identity: str = Field(pattern=SHA256_PATTERN)
+    environment_profile: EnvironmentProfile = EnvironmentProfile.FILESYSTEM_ONLY
+    object_format: GitObjectFormat | None = None
     files: list[SnapshotFile]
     complete: bool = True
     materialization_failure: FailureKind | None = None
@@ -485,6 +562,14 @@ class SnapshotManifest(FrozenModel):
 
     @model_validator(mode="after")
     def validate_manifest(self) -> SnapshotManifest:
+        if self.environment_profile is EnvironmentProfile.FILESYSTEM_ONLY and self.object_format is not None:
+            raise ValueError("filesystem-only snapshot cannot carry object format")
+        if (
+            self.complete
+            and self.environment_profile is EnvironmentProfile.GIT_REPOSITORY
+            and self.object_format is None
+        ):
+            raise ValueError("complete Git repository snapshot requires object format")
         if self.complete and self.materialization_failure is not None:
             raise ValueError("complete snapshot cannot carry a materialization failure")
         if not self.complete and self.materialization_failure not in {
@@ -517,6 +602,8 @@ class CommandExecutionEvidence(FrozenModel):
             raise ValueError("execution ordinal does not match snapshot materialization")
         if self.result.request.snapshot_identity != self.snapshot.identity:
             raise ValueError("execution result does not match its pristine snapshot")
+        if self.result.request.environment_profile is not self.snapshot.environment_profile:
+            raise ValueError("execution request profile does not match snapshot profile")
         request_failure = self.result.request.snapshot_validation_failure
         if self.snapshot.complete != (request_failure is None):
             raise ValueError("snapshot completeness does not match execution request")
@@ -536,7 +623,7 @@ class SourcePreservationFailure(FrozenModel):
 
 class VerificationEvidence(FrozenModel):
     contract: Literal["verification_evidence"] = "verification_evidence"
-    schema_version: Literal["1.0.0"] = "1.0.0"
+    schema_version: Literal["1.1.0"] = "1.1.0"
     plan: VerificationPlan
     executions: list[CommandExecutionEvidence]
     source_preservation_failures: list[SourcePreservationFailure] = Field(
@@ -579,6 +666,7 @@ class VerificationEvidence(FrozenModel):
                 result.request.argv != planned.argv
                 or result.request.cwd != planned.cwd
                 or result.request.requirement_level is not planned.requirement_level
+                or result.request.environment_profile is not planned.environment_profile
             ):
                 raise ValueError("execution request does not match planned command")
         failure_ordinals = [item.ordinal for item in self.source_preservation_failures]
@@ -607,6 +695,341 @@ class VerificationEvidence(FrozenModel):
         return self
 
 
+class LegacyPlannedCheck(FrozenModel):
+    """Frozen 1.0.0 PlannedCheck payload without profile fields."""
+
+    check_id: str = Field(min_length=1, pattern=r"^[a-z0-9][a-z0-9._-]*$")
+    requirement_level: RequirementLevel
+    kind: CheckKind
+    origin: CheckOrigin
+    selection_reason: str = Field(min_length=1)
+    argv: list[str] | None = None
+    cwd: str = "."
+    source_path: RawPath | None = None
+    source_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
+    source_size: int | None = Field(default=None, ge=0)
+    trusted_policy_label: str | None = Field(default=None, min_length=1)
+    trusted_policy_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
+
+    @model_validator(mode="after")
+    def validate_check(self) -> LegacyPlannedCheck:
+        if self.kind is CheckKind.COMMAND:
+            if not self.argv or any(not value or "\x00" in value for value in self.argv):
+                raise ValueError("command check requires structured non-empty argv")
+        elif self.argv is not None:
+            raise ValueError("structural invariant cannot have argv")
+        if self.kind is CheckKind.STRUCTURAL_INVARIANT and (
+            self.origin is not CheckOrigin.DETERMINISTIC_FLOOR
+            or self.requirement_level is not RequirementLevel.REQUIRED
+        ):
+            raise ValueError("structural invariant has invalid origin or requirement")
+        if self.kind is CheckKind.COMMAND and self.origin is CheckOrigin.DETERMINISTIC_FLOOR:
+            raise ValueError("deterministic floor cannot be a command")
+        repository_source = (self.source_path, self.source_sha256, self.source_size)
+        if any(value is not None for value in repository_source) != all(
+            value is not None for value in repository_source
+        ):
+            raise ValueError("check source path, digest, and size must be paired")
+        trusted_source = (self.trusted_policy_label, self.trusted_policy_sha256)
+        if any(value is not None for value in trusted_source) != all(
+            value is not None for value in trusted_source
+        ):
+            raise ValueError("trusted-policy label and digest must be paired")
+        if self.origin is CheckOrigin.REPOSITORY_CANONICAL:
+            if self.source_path is None or self.trusted_policy_label is not None:
+                raise ValueError("repository check requires repository provenance")
+        elif self.origin is CheckOrigin.TRUSTED_POLICY:
+            if self.trusted_policy_label is None or self.source_path is not None:
+                raise ValueError("trusted-policy check requires trusted provenance")
+        elif self.source_path is not None or self.trusted_policy_label is not None:
+            raise ValueError("check origin cannot carry protected provenance")
+        if self.cwd.startswith("/") or any(
+            part in ("", "..") for part in self.cwd.split("/")
+        ):
+            raise ValueError("check cwd must be repository-relative")
+        if any(part.lower() == ".git" for part in self.cwd.split("/")):
+            raise ValueError("check cwd cannot enter .git")
+        return self
+
+
+class LegacyVerificationPlan(FrozenModel):
+    """Frozen 1.0.0 VerificationPlan with its historical identity payload."""
+
+    contract: Literal["verification_plan"] = "verification_plan"
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    changeset_identity: str = Field(pattern=SHA256_PATTERN)
+    discovery_identity: str = Field(pattern=SHA256_PATTERN)
+    signals: ChangeSignals
+    checks: list[LegacyPlannedCheck]
+    identity: str = Field(pattern=SHA256_PATTERN)
+
+    def semantic_payload(self) -> dict[str, Any]:
+        return self.model_dump(mode="json", exclude={"identity"})
+
+    @model_validator(mode="after")
+    def validate_plan(self) -> LegacyVerificationPlan:
+        identifiers = [check.check_id for check in self.checks]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("planned check IDs must be unique")
+        if self.checks != sorted(self.checks, key=planned_check_sort_key):
+            raise ValueError("planned checks are not canonically ordered")
+        floor = [
+            check for check in self.checks if check.origin is CheckOrigin.DETERMINISTIC_FLOOR
+        ]
+        required_floor = {
+            "scope-capture",
+            "source-preservation",
+            "result-classification",
+        }
+        if {check.check_id for check in floor} != required_floor or any(
+            check.requirement_level is not RequirementLevel.REQUIRED
+            or check.kind is not CheckKind.STRUCTURAL_INVARIANT
+            or check.argv is not None
+            or check.source_path is not None
+            or check.trusted_policy_label is not None
+            for check in floor
+        ):
+            raise ValueError("deterministic policy floor is incomplete")
+        if self.identity != hash_payload(self.semantic_payload()):
+            raise ValueError("verification plan identity does not match payload")
+        return self
+
+
+class LegacyExecutionRequest(FrozenModel):
+    """Frozen 1.0.0 ExecutionRequest without environment profile."""
+
+    check_id: str = Field(min_length=1)
+    snapshot_identity: str = Field(pattern=SHA256_PATTERN)
+    requirement_level: RequirementLevel
+    argv: list[str] = Field(min_length=1)
+    cwd: str = "."
+    timeout_seconds: float = Field(gt=0, le=3600)
+    output_limit_bytes: int = Field(gt=0, le=16_777_216)
+    required_capabilities: list[CapabilityName]
+    nonzero_failure_kind: FailureKind = FailureKind.VERIFICATION
+    cwd_validation_failure: FailureKind | None = None
+    snapshot_validation_failure: FailureKind | None = None
+
+    @model_validator(mode="after")
+    def validate_request(self) -> LegacyExecutionRequest:
+        if any(not value or "\x00" in value for value in self.argv):
+            raise ValueError("execution argv must be structured and non-empty")
+        ordered = sorted(set(self.required_capabilities), key=lambda item: item.value)
+        if self.required_capabilities != ordered:
+            object.__setattr__(self, "required_capabilities", ordered)
+        if self.nonzero_failure_kind in {
+            FailureKind.INFRASTRUCTURE,
+            FailureKind.PERMISSION,
+            FailureKind.CAPABILITY,
+        }:
+            raise ValueError("nonzero classification cannot claim a host failure")
+        if self.cwd_validation_failure not in {None, FailureKind.CONFIGURATION, FailureKind.PERMISSION}:
+            raise ValueError("cwd validation failure must be configuration or permission")
+        if self.snapshot_validation_failure not in {
+            None,
+            FailureKind.CAPABILITY,
+            FailureKind.CONFIGURATION,
+            FailureKind.PERMISSION,
+        }:
+            raise ValueError(
+                "snapshot validation failure must be capability, configuration, or permission"
+            )
+        return self
+
+
+class LegacyExecutionResult(FrozenModel):
+    request: LegacyExecutionRequest
+    capability: ExecutionCapability
+    decision: ExecutionDecision
+    status: ExecutionStatus
+    failure_kind: FailureKind | None
+    exit_code: int | None
+    duration_ms: int = Field(ge=0)
+    stdout: OutputEvidence
+    stderr: OutputEvidence
+    required_evidence_gap: bool
+
+    @model_validator(mode="after")
+    def validate_result(self) -> LegacyExecutionResult:
+        expected_decision = derive_execution_decision(self.request, self.capability)
+        if self.decision != expected_decision:
+            raise ValueError("execution decision does not match request and capability")
+        if self.decision.kind is DecisionKind.EXECUTABLE:
+            if self.status is ExecutionStatus.NOT_RUN:
+                raise ValueError("executable decision cannot produce not-run status")
+        elif self.status is not ExecutionStatus.NOT_RUN:
+            raise ValueError("non-executable decision cannot have an executed outcome")
+        if self.status is ExecutionStatus.PASSED:
+            if self.failure_kind is not None or self.exit_code != 0:
+                raise ValueError("passed result cannot have a failure")
+        elif self.failure_kind is None:
+            raise ValueError("non-passing result requires a failure kind")
+        elif self.status is ExecutionStatus.FAILED:
+            if self.exit_code in (None, 0):
+                raise ValueError("failed result requires a non-zero exit code")
+            if self.failure_kind is not self.request.nonzero_failure_kind:
+                raise ValueError("failed result does not match nonzero classification")
+        elif self.status is ExecutionStatus.NOT_RUN:
+            expected_kinds = (
+                {self.decision.blocked_failure_kind}
+                if self.decision.blocked_failure_kind is not None
+                else set()
+            )
+            if self.exit_code is not None or self.failure_kind not in expected_kinds:
+                raise ValueError("not-run result is inconsistent with its decision")
+        elif self.status is ExecutionStatus.TIMED_OUT:
+            if self.exit_code is not None or self.failure_kind is not FailureKind.INFRASTRUCTURE:
+                raise ValueError("timed-out result must be an infrastructure failure")
+        elif self.status is ExecutionStatus.ERRORED:
+            if self.exit_code is not None or self.failure_kind not in {
+                FailureKind.INFRASTRUCTURE,
+                FailureKind.PERMISSION,
+                FailureKind.CONFIGURATION,
+            }:
+                raise ValueError("errored result has an invalid failure classification")
+        elif self.status is ExecutionStatus.CANCELLED and (
+            self.exit_code is not None
+            or self.failure_kind is not FailureKind.INFRASTRUCTURE
+        ):
+            raise ValueError("cancelled result must be an infrastructure failure")
+        expected_gap = (
+            self.request.requirement_level is RequirementLevel.REQUIRED
+            and not (
+                self.status is ExecutionStatus.PASSED
+                or (
+                    self.status is ExecutionStatus.FAILED
+                    and self.failure_kind is FailureKind.VERIFICATION
+                )
+            )
+        )
+        if self.required_evidence_gap != expected_gap:
+            raise ValueError("required evidence-gap classification is inconsistent")
+        return self
+
+
+class LegacySnapshotManifest(FrozenModel):
+    """Frozen 1.0.0 SnapshotManifest without environment profile fields."""
+
+    materialization_ordinal: int = Field(ge=0)
+    changeset_identity: str = Field(pattern=SHA256_PATTERN)
+    discovery_identity: str = Field(pattern=SHA256_PATTERN)
+    files: list[SnapshotFile]
+    complete: bool = True
+    materialization_failure: FailureKind | None = None
+    identity: str = Field(pattern=SHA256_PATTERN)
+
+    @model_validator(mode="after")
+    def validate_manifest(self) -> LegacySnapshotManifest:
+        if self.complete and self.materialization_failure is not None:
+            raise ValueError("complete snapshot cannot carry a materialization failure")
+        if not self.complete and self.materialization_failure not in {
+            FailureKind.CAPABILITY,
+            FailureKind.CONFIGURATION,
+            FailureKind.PERMISSION,
+        }:
+            raise ValueError("incomplete snapshot requires a structured materialization failure")
+        if not self.complete and self.files:
+            raise ValueError("incomplete snapshot cannot expose a partial executable tree")
+        paths = [item.path.raw_b64 for item in self.files]
+        if len(paths) != len(set(paths)):
+            raise ValueError("snapshot file paths must be unique")
+        if self.files != sorted(self.files, key=lambda item: item.path.to_bytes()):
+            raise ValueError("snapshot files are not canonical")
+        if self.identity != hash_payload(self.model_dump(mode="json", exclude={"identity"})):
+            raise ValueError("snapshot identity does not match manifest")
+        return self
+
+
+class LegacyCommandExecutionEvidence(FrozenModel):
+    ordinal: int = Field(ge=0)
+    snapshot: LegacySnapshotManifest
+    result: LegacyExecutionResult
+
+    @model_validator(mode="after")
+    def validate_binding(self) -> LegacyCommandExecutionEvidence:
+        if self.ordinal != self.snapshot.materialization_ordinal:
+            raise ValueError("execution ordinal does not match snapshot materialization")
+        if self.result.request.snapshot_identity != self.snapshot.identity:
+            raise ValueError("execution result does not match its pristine snapshot")
+        request_failure = self.result.request.snapshot_validation_failure
+        if self.snapshot.complete != (request_failure is None):
+            raise ValueError("snapshot completeness does not match execution request")
+        if not self.snapshot.complete and request_failure is not self.snapshot.materialization_failure:
+            raise ValueError("snapshot materialization failure is not bound to the request")
+        return self
+
+
+class LegacyVerificationEvidence(FrozenModel):
+    """Frozen 1.0.0 VerificationEvidence with historical nested payloads."""
+
+    contract: Literal["verification_evidence"] = "verification_evidence"
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    plan: LegacyVerificationPlan
+    executions: list[LegacyCommandExecutionEvidence]
+    source_preservation_failures: list[SourcePreservationFailure] = Field(
+        default_factory=list
+    )
+    identity: str = Field(pattern=SHA256_PATTERN)
+
+    def semantic_payload(self) -> dict[str, Any]:
+        return self.model_dump(mode="json", exclude={"identity"})
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> LegacyVerificationEvidence:
+        planned_command_ids = [
+            check.check_id
+            for check in self.plan.checks
+            if check.kind is CheckKind.COMMAND
+        ]
+        actual = [item.result.request.check_id for item in self.executions]
+        if actual != planned_command_ids:
+            raise ValueError("execution results do not cover every command check")
+        if [item.ordinal for item in self.executions] != list(range(len(self.executions))):
+            raise ValueError("command execution ordinals are not canonical")
+        for item in self.executions:
+            if (
+                item.snapshot.changeset_identity != self.plan.changeset_identity
+                or item.snapshot.discovery_identity != self.plan.discovery_identity
+            ):
+                raise ValueError("command snapshot does not match verification plan")
+        planned_command_by_id = {
+            check.check_id: check
+            for check in self.plan.checks
+            if check.kind is CheckKind.COMMAND
+        }
+        for item in self.executions:
+            result = item.result
+            planned = planned_command_by_id[result.request.check_id]
+            if (
+                result.request.argv != planned.argv
+                or result.request.cwd != planned.cwd
+                or result.request.requirement_level is not planned.requirement_level
+            ):
+                raise ValueError("execution request does not match planned command")
+        failure_ordinals = [item.ordinal for item in self.source_preservation_failures]
+        if failure_ordinals != sorted(set(failure_ordinals)):
+            raise ValueError("source-preservation failures are not canonically ordered")
+        executions_by_ordinal = {item.ordinal: item for item in self.executions}
+        for failure in self.source_preservation_failures:
+            execution = executions_by_ordinal.get(failure.ordinal)
+            if execution is None:
+                raise ValueError("source-preservation failure has no execution")
+            if execution.result.status is ExecutionStatus.NOT_RUN:
+                raise ValueError("source-preservation failure cannot bind to a not-run execution")
+            if failure.check_id != execution.result.request.check_id:
+                raise ValueError("source-preservation failure check does not match execution")
+            if failure.snapshot_identity != execution.snapshot.identity:
+                raise ValueError("source-preservation failure snapshot is not bound")
+            if (
+                execution.snapshot.changeset_identity != self.plan.changeset_identity
+                or execution.snapshot.discovery_identity != self.plan.discovery_identity
+            ):
+                raise ValueError("source-preservation failure does not match the plan")
+        if self.identity != hash_payload(self.semantic_payload()):
+            raise ValueError("verification evidence identity does not match payload")
+        return self
+
+
 def build_verification_evidence(
     plan: VerificationPlan,
     executions: list[tuple[SnapshotManifest, ExecutionResult]],
@@ -619,7 +1042,7 @@ def build_verification_evidence(
     ]
     provisional = VerificationEvidence.model_construct(
         contract="verification_evidence",
-        schema_version="1.0.0",
+        schema_version="1.1.0",
         plan=plan,
         executions=ordered_executions,
         source_preservation_failures=source_preservation_failures or [],
@@ -646,7 +1069,9 @@ _ORIGIN_ORDER = {
 }
 
 
-def planned_check_sort_key(check: PlannedCheck) -> tuple[int, int, str]:
+def planned_check_sort_key(
+    check: PlannedCheck | LegacyPlannedCheck,
+) -> tuple[int, int, str]:
     return (
         _ORIGIN_ORDER[check.origin],
         _FLOOR_ORDER.get(check.check_id, 0),
@@ -659,3 +1084,42 @@ def hash_payload(payload: dict[str, Any]) -> str:
         payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
+
+
+VerificationPlanDocument = VerificationPlan | LegacyVerificationPlan
+VerificationEvidenceDocument = VerificationEvidence | LegacyVerificationEvidence
+
+
+def _load_json_document(value: dict[str, Any] | str | bytes, contract: str) -> dict[str, Any]:
+    payload = json.loads(value) if isinstance(value, (str, bytes)) else value
+    if not isinstance(payload, dict):
+        raise ValueError(f"{contract} document must be a JSON object")
+    return payload
+
+
+def load_verification_plan(
+    value: dict[str, Any] | str | bytes,
+) -> VerificationPlanDocument:
+    """Load only the frozen 1.0.0 or current 1.1.0 plan contract."""
+
+    payload = _load_json_document(value, "verification plan")
+    version = payload.get("schema_version")
+    if version == LEGACY_VERIFICATION_SCHEMA_VERSION:
+        return LegacyVerificationPlan.model_validate(payload)
+    if version == VERIFICATION_SCHEMA_VERSION:
+        return VerificationPlan.model_validate(payload)
+    raise ValueError(f"unsupported verification plan schema version: {version!r}")
+
+
+def load_verification_evidence(
+    value: dict[str, Any] | str | bytes,
+) -> VerificationEvidenceDocument:
+    """Load only the frozen 1.0.0 or current 1.1.0 evidence contract."""
+
+    payload = _load_json_document(value, "verification evidence")
+    version = payload.get("schema_version")
+    if version == LEGACY_VERIFICATION_SCHEMA_VERSION:
+        return LegacyVerificationEvidence.model_validate(payload)
+    if version == VERIFICATION_SCHEMA_VERSION:
+        return VerificationEvidence.model_validate(payload)
+    raise ValueError(f"unsupported verification evidence schema version: {version!r}")

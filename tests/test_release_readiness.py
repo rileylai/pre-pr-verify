@@ -11,6 +11,7 @@ from pre_pr_verify.schema import (
     render_review_artifact_schema,
     render_semantic_assessment_schema,
     render_verification_evidence_schema,
+    render_verification_plan_schema,
 )
 
 
@@ -19,7 +20,8 @@ def test_all_v1_schemas_are_available_from_checkout_and_installed_core() -> None
         "changeset-1.0.0.schema.json": render_legacy_changeset_schema,
         "changeset-1.1.0.schema.json": render_changeset_schema,
         "discovery-1.0.0.schema.json": render_discovery_schema,
-        "verification-evidence-1.0.0.schema.json": render_verification_evidence_schema,
+        "verification-plan-1.1.0.schema.json": render_verification_plan_schema,
+        "verification-evidence-1.1.0.schema.json": render_verification_evidence_schema,
         "semantic-assessment-1.0.0.schema.json": render_semantic_assessment_schema,
         "review-artifact-1.0.0.schema.json": render_review_artifact_schema,
     }
@@ -146,7 +148,7 @@ def test_runtime_has_no_developer_path_or_provider_key_dependency() -> None:
 def test_current_version_and_documented_boundaries() -> None:
     readme = Path("README.md").read_text()
 
-    assert __version__ == "0.1.4"
+    assert __version__ == "0.1.5"
     assert Path(".python-version").read_text().strip() == "3.12.13"
     assert "Semantic review, ReviewArtifact reduction/reporting, and GitHub integration remain unimplemented" not in readme
     assert "No `.env`" in readme

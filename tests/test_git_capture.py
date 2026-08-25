@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from pre_pr_verify.errors import PreflightError
-from pre_pr_verify.git_capture import capture_changeset
+from pre_pr_verify.git_capture import capture_changeset, source_preservation_fingerprint
 from pre_pr_verify.models import ChangeOrigin, ContentLimits, FileKind, ScopeMode
 
 
@@ -672,6 +672,31 @@ def test_capture_preserves_head_index_and_working_state(repository: Path) -> Non
         ).stdout
         == before_status
     )
+
+
+def test_linked_worktree_config_is_bound_to_source_preservation(
+    tmp_path: Path,
+) -> None:
+    main = tmp_path / "main"
+    linked = tmp_path / "linked"
+    main.mkdir()
+    git(main, "init", "-b", "main")
+    git(main, "config", "user.name", "PrePR Verify Test")
+    git(main, "config", "user.email", "test@example.invalid")
+    write(main, "tracked.txt", b"base\n")
+    git(main, "add", ".")
+    git(main, "commit", "-m", "base")
+    git(main, "worktree", "add", "-b", "linked", str(linked), "HEAD")
+    git(linked, "config", "extensions.worktreeConfig", "true")
+    git(linked, "config", "--worktree", "prepr-verify.baseline", "yes")
+
+    before = source_preservation_fingerprint(linked)
+    worktree_config = Path(git(linked, "rev-parse", "--git-path", "config.worktree"))
+    worktree_config.write_bytes(
+        worktree_config.read_bytes() + b"[prepr-verify-change]\n\tvalue = detected\n"
+    )
+
+    assert source_preservation_fingerprint(linked) != before
 
 
 def test_unrelated_histories_have_no_merge_base(tmp_path: Path) -> None:

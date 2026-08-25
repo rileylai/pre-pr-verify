@@ -64,7 +64,7 @@ Explicit repository and base (possibly materialized by human-attached setup)
   -> requirement and Standards evidence discovery
   -> impact and risk proposal
   -> deterministic verification floor
-  -> sandbox-aware verification execution
+  -> capability-aware verification execution
   -> semantic review
   -> structured evidence
   -> deterministic axis/verdict reduction
@@ -75,9 +75,32 @@ V1 supports macOS/Linux Git repositories and is language-agnostic. Windows behav
 
 PrePR Verify fixes the portable review workflow, evidence, verdict, and safety skeleton. Repository and company requirements, canonical verification commands, security tooling, affected-scope conventions, and monorepo practices enter that skeleton as discovered evidence or explicitly trusted policy; they are not encoded as language or framework matrices in the product.
 
+## Repository-fidelity execution profiles
+
+Verification execution exposes exactly two repository-fidelity profiles:
+`FILESYSTEM_ONLY` and `GIT_REPOSITORY`. `FILESYSTEM_ONLY` retains the historical
+fresh disposable snapshot with no `.git` directory. `GIT_REPOSITORY` creates a
+fresh independent standalone Git repository for each command, with its own
+administrative state, object database, `HEAD`, index, working tree, and
+sanitized configuration. It preserves the reviewed `HEAD` identity and the
+captured staged, unstaged, and untracked semantics without reusing the author's
+Git metadata or authority.
+
+Repository fidelity is separate from host `CapabilityName` and isolation
+capabilities. Profile resolution starts at `FILESYSTEM_ONLY` and can only be
+raised to `GIT_REPOSITORY` by an explicit repository declaration, trusted
+policy, model proposal, or user invocation. No profile source grants execution
+authority, and no default command family is made Git-aware automatically.
+
+`GIT_REPOSITORY` is intentionally bounded: it does not promise arbitrary
+history or ancestry, tags, remotes, reflogs, submodules, Git LFS, or
+author-specific Git configuration behavior. Unsupported required fidelity is a
+pre-execution evidence gap. The ordinary subprocess adapter remains a bounded
+process adapter, not a general hostile-code filesystem sandbox.
+
 ## Versioned data contracts
 
-ChangeSet and ReviewArtifact are independent versioned contracts. ChangeSet describes captured repository state, while ReviewArtifact describes completed review evidence, axes, reduction, and reporting. Each has its own schema version and release lifecycle; neither uses a project-wide global `schema_version`.
+ChangeSet and ReviewArtifact are independent versioned contracts. ChangeSet describes captured repository state, while ReviewArtifact describes completed review evidence, axes, reduction, and reporting. Each has its own schema version and release lifecycle; neither uses a project-wide global `schema_version`. The current verification contracts are `VerificationPlan 1.1.0` and `VerificationEvidence 1.1.0`; their frozen `1.0.0` counterparts remain loadable legacy contracts with their historical payload and identity semantics. New verification artifacts explicitly bind the resolved environment profile. ChangeSet remains unchanged by the Git-aware execution profiles.
 
 ## Read-only meaning
 

@@ -55,8 +55,12 @@ Release acceptance also requires a locked clean sync, sdist/wheel build,
 installation and import from the built wheel in a disposable environment,
 checked-in schema availability, root Skill validation, documentation/limitation
 consistency, full deterministic tests, and self-dogfood over the complete pending
-ChangeSet. The repository checkout is the Skill distribution; built Python
-artifacts are the deterministic core distribution.
+ChangeSet. The Git-aware acceptance must prove both the unchanged
+`FILESYSTEM_ONLY` path and an explicitly planned `GIT_REPOSITORY` path, including
+indirect Git-dependent checks, direct unsupported-Git gating, incomplete
+materialization evidence, source preservation, and the absence of automatic
+profile promotion. The repository checkout is the Skill distribution; built
+Python artifacts are the deterministic core distribution.
 
 The installed-core gate also obtains `installed_core_identity()` from the built
 wheel and from an isolated copied-Skill tree with no `.git`. The value must be

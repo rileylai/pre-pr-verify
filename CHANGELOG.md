@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.5 - 2026-08-25
+
+- Add `FILESYSTEM_ONLY` and bounded `GIT_REPOSITORY` execution profiles with
+  `VerificationPlan` / `VerificationEvidence` 1.1.0 contracts, monotonic
+  profile resolution, and bounded provenance.
+- Add independent standalone Git snapshot materialization with original
+  HEAD/index/working/untracked fidelity, SHA-1/SHA-256 support, and bounded
+  materialization limits.
+- Keep `NOT_RUN` and evidence gaps truthful, enforce a bounded direct-Git
+  gate, and harden source Git preservation detection for config and
+  config.worktree mutations.
+- Align the documentation and V1 runbook with the implemented behavior.
+
 ## 0.1.4 - 2026-08-25
 
 - Require only bounded output for ordinary local verification commands by

@@ -9,17 +9,23 @@ import stat
 import subprocess
 import time
 from pathlib import Path
-from typing import IO, Iterable, cast
+from typing import IO, Iterable, Literal, cast
 
 from pre_pr_verify.discovery_models import DiscoveryResult
 from pre_pr_verify.errors import PreflightError
 from pre_pr_verify.git_capture import _RootedPathMissing, _RootedReader
 from pre_pr_verify.models import ChangeSet
-from pre_pr_verify.snapshot import disposable_snapshot, _snapshot_materialization_gap
+from pre_pr_verify.snapshot import (
+    _git_snapshot_materialization_gap,
+    _snapshot_materialization_gap,
+    disposable_git_snapshot,
+    disposable_snapshot,
+)
 from pre_pr_verify.verification import build_execution_request
 from pre_pr_verify.verification_models import (
     CapabilityName,
     DecisionKind,
+    EnvironmentProfile,
     ExecutionCapability,
     ExecutionDecision,
     ExecutionRequest,
@@ -35,6 +41,82 @@ from pre_pr_verify.verification_models import (
     build_verification_evidence,
     derive_execution_decision,
 )
+
+
+_DirectGitClassification = Literal[
+    "not_direct_git",
+    "supported_bounded_git",
+    "unsupported_bounded_git",
+    "prohibited_profile_override",
+]
+
+_GIT_CONFIG_SELECTORS = (
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--config-env",
+)
+
+
+def _classify_direct_git_request(argv: list[str]) -> _DirectGitClassification:
+    """Classify only the frozen, deliberately tiny direct-Git surface."""
+
+    if not argv or os.path.basename(argv[0]) != "git":
+        return "not_direct_git"
+
+    for token in argv[1:]:
+        if token in {"-C", "-c", *_GIT_CONFIG_SELECTORS}:
+            return "prohibited_profile_override"
+        if token.startswith(("-C", "-c")):
+            return "prohibited_profile_override"
+        if any(token.startswith(selector + "=") for selector in _GIT_CONFIG_SELECTORS):
+            return "prohibited_profile_override"
+
+    args = argv[1:]
+    if args in (["rev-parse", "HEAD"], ["rev-parse", "--show-toplevel"]):
+        return "supported_bounded_git"
+
+    if args and args[0] == "ls-files":
+        pathspecs = args[1:]
+        if pathspecs and pathspecs[0] == "--":
+            pathspecs = pathspecs[1:]
+            if all(pathspec != "" for pathspec in pathspecs):
+                return "supported_bounded_git"
+        elif all(pathspec != "" and not pathspec.startswith("-") for pathspec in pathspecs):
+            return "supported_bounded_git"
+        return "unsupported_bounded_git"
+
+    if args and args[0] == "status":
+        if args[1:] in ([], ["--porcelain"], ["--porcelain=v1"], ["--short"]):
+            return "supported_bounded_git"
+        return "unsupported_bounded_git"
+
+    if args and args[0] == "diff":
+        diff_args = args[1:]
+        if diff_args in ([], ["--cached"]):
+            return "supported_bounded_git"
+        if diff_args and diff_args[0] == "--cached":
+            diff_args = diff_args[1:]
+        if diff_args and diff_args[0] == "--":
+            if all(pathspec != "" for pathspec in diff_args[1:]):
+                return "supported_bounded_git"
+        return "unsupported_bounded_git"
+
+    return "unsupported_bounded_git"
+
+
+def _direct_git_gate_failure(
+    environment_profile: EnvironmentProfile,
+    argv: list[str],
+) -> FailureKind | None:
+    if environment_profile is not EnvironmentProfile.GIT_REPOSITORY:
+        return None
+    classification = _classify_direct_git_request(argv)
+    if classification == "prohibited_profile_override":
+        return FailureKind.CONFIGURATION
+    if classification == "unsupported_bounded_git":
+        return FailureKind.CAPABILITY
+    return None
 
 
 def decide_execution(
@@ -542,8 +624,45 @@ def execute_verification_plan(
         if check.argv is None:
             continue
         execution_record = None
+        direct_git_failure = _direct_git_gate_failure(
+            check.environment_profile, check.argv
+        )
+        if direct_git_failure is not None:
+            # Reject unsupported direct Git before materialization or child
+            # process creation.  The incomplete manifest is only the bound
+            # evidence record for the pre-execution gate; it is not a
+            # partially materialized execution environment.
+            gap_snapshot = _git_snapshot_materialization_gap(
+                changeset,
+                discovery,
+                materialization_ordinal=command_ordinal,
+                failure=direct_git_failure,
+                object_format=None,
+            )
+            request = build_execution_request(
+                check,
+                gap_snapshot,
+                timeout_seconds=timeout_seconds,
+                output_limit_bytes=output_limit_bytes,
+                required_capabilities=required_capabilities,
+                snapshot_validation_failure=direct_git_failure,
+            )
+            result = execute_request(
+                request,
+                capability,
+                Path(changeset.repository_root),
+                redaction_values=redaction_values,
+            )
+            executions.append((gap_snapshot, result))
+            command_ordinal += 1
+            continue
         try:
-            with disposable_snapshot(
+            materializer = (
+                disposable_git_snapshot
+                if check.environment_profile is EnvironmentProfile.GIT_REPOSITORY
+                else disposable_snapshot
+            )
+            with materializer(
                 changeset,
                 discovery,
                 plan=plan,
@@ -568,11 +687,20 @@ def execute_verification_plan(
                 # The ChangeSet and plan already establish review scope. A
                 # later inability to materialize complete content is evidence
                 # that the command could not run, not a new capture failure.
-                gap_snapshot = _snapshot_materialization_gap(
-                    changeset,
-                    discovery,
-                    materialization_ordinal=command_ordinal,
-                )
+                if check.environment_profile is EnvironmentProfile.GIT_REPOSITORY:
+                    gap_snapshot = _git_snapshot_materialization_gap(
+                        changeset,
+                        discovery,
+                        materialization_ordinal=command_ordinal,
+                        failure=FailureKind.CAPABILITY,
+                        object_format=None,
+                    )
+                else:
+                    gap_snapshot = _snapshot_materialization_gap(
+                        changeset,
+                        discovery,
+                        materialization_ordinal=command_ordinal,
+                    )
                 request = build_execution_request(
                     check,
                     gap_snapshot,
@@ -594,14 +722,15 @@ def execute_verification_plan(
                 # separate deterministic evidence gap.
                 executions.append(execution_record)
                 snapshot_manifest, _result = execution_record
-                source_preservation_failures.append(
-                    SourcePreservationFailure(
-                        ordinal=command_ordinal,
-                        check_id=check.check_id,
-                        snapshot_identity=snapshot_manifest.identity,
-                        reason="source repository changed after command execution",
+                if _result.status is not ExecutionStatus.NOT_RUN:
+                    source_preservation_failures.append(
+                        SourcePreservationFailure(
+                            ordinal=command_ordinal,
+                            check_id=check.check_id,
+                            snapshot_identity=snapshot_manifest.identity,
+                            reason="source repository changed after command execution",
+                        )
                     )
-                )
         else:
             assert execution_record is not None
             executions.append(execution_record)

@@ -15,14 +15,18 @@ from pre_pr_verify.verification_models import (
     ChangeSignals,
     CheckKind,
     CheckOrigin,
+    EnvironmentProfile,
     PlannedCheck,
     ExecutionRequest,
     FailureKind,
+    ProfileProvenance,
+    ProfileProvenanceChannel,
     RequirementLevel,
     SnapshotManifest,
     VerificationPlan,
     hash_payload,
     planned_check_sort_key,
+    resolve_profile_provenance,
 )
 
 
@@ -33,6 +37,8 @@ class PlannerCheckInput:
     selection_reason: str
     argv: tuple[str, ...]
     cwd: str = "."
+    environment_profile: EnvironmentProfile = EnvironmentProfile.FILESYSTEM_ONLY
+    profile_source_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +51,7 @@ class RepositoryCheckInput:
     source_path: bytes
     source_sha256: str
     source_size: int
+    environment_profile: EnvironmentProfile = EnvironmentProfile.FILESYSTEM_ONLY
 
 
 @dataclass(frozen=True)
@@ -56,6 +63,19 @@ class TrustedPolicyCheckInput:
     policy_label: str
     policy_sha256: str
     cwd: str = "."
+    environment_profile: EnvironmentProfile = EnvironmentProfile.FILESYSTEM_ONLY
+
+
+_CANDIDATE_ORIGIN_ORDER = {
+    CheckOrigin.TRUSTED_POLICY: 0,
+    CheckOrigin.REPOSITORY_CANONICAL: 1,
+    CheckOrigin.MODEL_PROPOSED: 2,
+}
+_CANDIDATE_ORIGIN_CHANNEL = {
+    CheckOrigin.TRUSTED_POLICY: ProfileProvenanceChannel.TRUSTED_POLICY,
+    CheckOrigin.REPOSITORY_CANONICAL: ProfileProvenanceChannel.REPOSITORY_DECLARATION,
+    CheckOrigin.MODEL_PROPOSED: ProfileProvenanceChannel.MODEL_PROPOSAL,
+}
 
 
 _FLOOR = (
@@ -129,6 +149,7 @@ def extract_change_signals(changeset: ChangeSet) -> ChangeSignals:
 
 
 def _planner_check(value: PlannerCheckInput) -> PlannedCheck:
+    profile = _coerce_environment_profile(value.environment_profile)
     return PlannedCheck(
         check_id=value.check_id,
         requirement_level=value.requirement_level,
@@ -137,10 +158,17 @@ def _planner_check(value: PlannerCheckInput) -> PlannedCheck:
         selection_reason=value.selection_reason,
         argv=list(value.argv),
         cwd=value.cwd,
+        environment_profile=profile,
+        profile_provenance=_profile_entries(
+            ProfileProvenanceChannel.MODEL_PROPOSAL,
+            profile,
+            value.profile_source_sha256 or _planner_profile_digest(value),
+        ),
     )
 
 
 def _repository_check(value: RepositoryCheckInput) -> PlannedCheck:
+    profile = _coerce_environment_profile(value.environment_profile)
     return PlannedCheck(
         check_id=value.check_id,
         requirement_level=value.requirement_level,
@@ -152,10 +180,17 @@ def _repository_check(value: RepositoryCheckInput) -> PlannedCheck:
         source_path=RawPath.from_bytes(value.source_path),
         source_sha256=value.source_sha256,
         source_size=value.source_size,
+        environment_profile=profile,
+        profile_provenance=_profile_entries(
+            ProfileProvenanceChannel.REPOSITORY_DECLARATION,
+            profile,
+            value.source_sha256,
+        ),
     )
 
 
 def _trusted_policy_check(value: TrustedPolicyCheckInput) -> PlannedCheck:
+    profile = _coerce_environment_profile(value.environment_profile)
     return PlannedCheck(
         check_id=value.check_id,
         requirement_level=value.requirement_level,
@@ -166,7 +201,125 @@ def _trusted_policy_check(value: TrustedPolicyCheckInput) -> PlannedCheck:
         cwd=value.cwd,
         trusted_policy_label=value.policy_label,
         trusted_policy_sha256=value.policy_sha256,
+        environment_profile=profile,
+        profile_provenance=_profile_entries(
+            ProfileProvenanceChannel.TRUSTED_POLICY,
+            profile,
+            value.policy_sha256,
+        ),
     )
+
+
+def _coerce_environment_profile(value: EnvironmentProfile | str) -> EnvironmentProfile:
+    try:
+        return EnvironmentProfile(value)
+    except (TypeError, ValueError) as error:
+        raise PreflightError(f"unsupported environment profile: {value!r}") from error
+
+
+def _profile_entries(
+    channel: ProfileProvenanceChannel,
+    profile: EnvironmentProfile,
+    source_sha256: str,
+) -> list[ProfileProvenance]:
+    if profile is EnvironmentProfile.FILESYSTEM_ONLY:
+        return []
+    try:
+        return [
+            ProfileProvenance(
+                channel=channel,
+                requested_profile=profile,
+                source_sha256=source_sha256,
+            )
+        ]
+    except ValueError as error:
+        raise PreflightError(
+            f"{channel.value} profile requirement lacks a valid stable digest"
+        ) from error
+
+
+def _planner_profile_digest(value: PlannerCheckInput) -> str:
+    return hash_payload(
+        {
+            "channel": ProfileProvenanceChannel.MODEL_PROPOSAL.value,
+            "check_id": value.check_id,
+            "requirement_level": value.requirement_level.value,
+            "argv": list(value.argv),
+            "cwd": value.cwd,
+            "environment_profile": _coerce_environment_profile(
+                value.environment_profile
+            ).value,
+            "selection_reason": value.selection_reason,
+        }
+    )
+
+
+def _user_profile_entry(
+    profile: EnvironmentProfile | str,
+    source_sha256: str | None,
+) -> list[ProfileProvenance]:
+    resolved = _coerce_environment_profile(profile)
+    if resolved is EnvironmentProfile.FILESYSTEM_ONLY:
+        return []
+    digest = source_sha256 or hash_payload(
+        {
+            "channel": ProfileProvenanceChannel.USER_INVOCATION.value,
+            "environment_profile": resolved.value,
+        }
+    )
+    return _profile_entries(
+        ProfileProvenanceChannel.USER_INVOCATION,
+        resolved,
+        digest,
+    )
+
+
+def _execution_definition(check: PlannedCheck) -> tuple[object, ...]:
+    return (
+        check.requirement_level,
+        check.kind,
+        tuple(check.argv or []),
+        check.cwd,
+    )
+
+
+def _merge_check_candidates(
+    candidates: list[PlannedCheck],
+    user_profile_entries: list[ProfileProvenance],
+) -> PlannedCheck:
+    primary = min(
+        candidates,
+        key=lambda check: _CANDIDATE_ORIGIN_ORDER[check.origin],
+    )
+    channels = [_CANDIDATE_ORIGIN_CHANNEL[check.origin] for check in candidates]
+    if len(channels) != len(set(channels)):
+        raise PreflightError(
+            f"duplicate profile requirement channel for verification check: {primary.check_id}"
+        )
+    definition = _execution_definition(primary)
+    if any(_execution_definition(check) != definition for check in candidates):
+        raise PreflightError(
+            f"verification check ID collides with conflicting definition: {primary.check_id}"
+        )
+    requested = [
+        entry
+        for check in candidates
+        for entry in check.profile_provenance
+    ]
+    requested.extend(user_profile_entries)
+    try:
+        profile, provenance = resolve_profile_provenance(requested)
+        return PlannedCheck.model_validate(
+            {
+                **primary.model_dump(mode="json"),
+                "environment_profile": profile,
+                "profile_provenance": provenance,
+            }
+        )
+    except ValueError as error:
+        raise PreflightError(
+            f"invalid profile requirements for verification check: {primary.check_id}"
+        ) from error
 
 
 def discover_canonical_checks(repository: Path | str) -> list[RepositoryCheckInput]:
@@ -192,7 +345,14 @@ def discover_canonical_checks(repository: Path | str) -> list[RepositoryCheckInp
     digest = hashlib.sha256(raw).hexdigest()
     result: list[RepositoryCheckInput] = []
     for item in configured:
-        if not isinstance(item, dict) or set(item) - {"id", "level", "argv", "cwd", "reason"}:
+        if not isinstance(item, dict) or set(item) - {
+            "id",
+            "level",
+            "argv",
+            "cwd",
+            "reason",
+            "environment_profile",
+        }:
             raise PreflightError("canonical verification check has unsupported fields")
         try:
             check_id = item["id"]
@@ -211,6 +371,15 @@ def discover_canonical_checks(repository: Path | str) -> list[RepositoryCheckInp
         reason = item.get(
             "reason", "Declared by repository-native canonical verification guidance."
         )
+        try:
+            environment_profile = _coerce_environment_profile(
+                item.get(
+                    "environment_profile",
+                    EnvironmentProfile.FILESYSTEM_ONLY.value,
+                )
+            )
+        except PreflightError as error:
+            raise PreflightError("canonical verification check is malformed") from error
         if not isinstance(cwd, str) or not isinstance(reason, str) or not reason:
             raise PreflightError("canonical verification check is malformed")
         result.append(
@@ -223,6 +392,7 @@ def discover_canonical_checks(repository: Path | str) -> list[RepositoryCheckInp
                 source_path=b"pyproject.toml",
                 source_sha256=digest,
                 source_size=len(raw),
+                environment_profile=environment_profile,
             )
         )
     ordered = sorted(result, key=lambda check: check.check_id)
@@ -238,30 +408,35 @@ def build_verification_plan(
     canonical_checks: Iterable[RepositoryCheckInput],
     trusted_policy_checks: Iterable[TrustedPolicyCheckInput],
     planner_additions: Iterable[PlannerCheckInput],
+    minimum_environment_profile: EnvironmentProfile = EnvironmentProfile.FILESYSTEM_ONLY,
+    user_invocation_sha256: str | None = None,
 ) -> VerificationPlan:
     if Path(changeset.repository_root).resolve() != Path(discovery.repository_root).resolve():
         raise PreflightError("ChangeSet and discovery repository roots do not match")
     repository = [_repository_check(value) for value in canonical_checks]
     trusted = [_trusted_policy_check(value) for value in trusted_policy_checks]
     proposed = [_planner_check(value) for value in planner_additions]
-    checks = [*_FLOOR, *trusted, *repository]
-    protected_ids = {check.check_id for check in checks}
-    if len(protected_ids) != len(checks):
-        raise PreflightError("protected verification check IDs collide")
     proposed_ids = [check.check_id for check in proposed]
     if len(set(proposed_ids)) != len(proposed_ids):
         raise PreflightError("planner check IDs must be unique")
-    collisions = protected_ids.intersection(proposed_ids)
-    if collisions:
-        raise PreflightError(
-            f"planner check ID collides with protected check: {sorted(collisions)[0]}"
-        )
-    checks.extend(proposed)
+    user_profile_entries = _user_profile_entry(
+        minimum_environment_profile,
+        user_invocation_sha256,
+    )
+    candidates = [*trusted, *repository, *proposed]
+    grouped: dict[str, list[PlannedCheck]] = {}
+    for check in candidates:
+        grouped.setdefault(check.check_id, []).append(check)
+    checks = [*_FLOOR]
+    checks.extend(
+        _merge_check_candidates(group, user_profile_entries)
+        for group in grouped.values()
+    )
     checks.sort(key=planned_check_sort_key)
     signals = extract_change_signals(changeset)
     provisional = VerificationPlan.model_construct(
         contract="verification_plan",
-        schema_version="1.0.0",
+        schema_version="1.1.0",
         changeset_identity=changeset.identity,
         discovery_identity=discovery.identity,
         signals=signals,
@@ -271,7 +446,7 @@ def build_verification_plan(
     return VerificationPlan.model_validate(
         {
             "contract": "verification_plan",
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "changeset_identity": changeset.identity,
             "discovery_identity": discovery.identity,
             "signals": signals,
@@ -293,6 +468,10 @@ def build_execution_request(
 ) -> ExecutionRequest:
     if check.kind is not CheckKind.COMMAND or check.argv is None:
         raise PreflightError("only command checks can become execution requests")
+    if snapshot.environment_profile is not check.environment_profile:
+        raise PreflightError(
+            "snapshot environment profile does not match planned check"
+        )
     manifest_failure = snapshot.materialization_failure
     if not snapshot.complete and manifest_failure is None:
         # Fail closed even for an object constructed outside normal model
@@ -319,6 +498,7 @@ def build_execution_request(
         timeout_seconds=timeout_seconds,
         output_limit_bytes=output_limit_bytes,
         required_capabilities=list(required_capabilities),
+        environment_profile=check.environment_profile,
         nonzero_failure_kind=nonzero_failure_kind,
         snapshot_validation_failure=snapshot_validation_failure,
     )

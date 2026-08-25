@@ -289,3 +289,37 @@ installed Python core. It works in copied Skills and wheels without `.git`,
 does not inspect the target repository or claim an unavailable Git SHA, and is
 still supplied independently to ReviewArtifact construction/loading. This
 changes no versioned schema or verifier version.
+
+## ADR-030: Bounded independent Git repository execution profile
+
+**Status:** Accepted
+
+Dogfood exposed a legitimate compatibility gap: a repository-wide verification
+command could be correct for the reviewed change while its internal Git use
+failed inside the historical `.git`-free filesystem snapshot. That historical
+snapshot remains valid for `FILESYSTEM_ONLY`. v0.1.5 therefore adds an explicit
+`GIT_REPOSITORY` profile alongside `FILESYSTEM_ONLY`, resolved monotonically
+from repository declarations, trusted policy, model proposals, and user
+invocation.
+
+`GIT_REPOSITORY` is a fresh independent standalone repository per command. It
+has its own Git metadata, object database, `HEAD`, index, working tree, and
+sanitized configuration. Linked worktrees, shared metadata, alternates,
+hardlink dependencies, and inherited author Git authority remain rejected.
+The profile provides bounded HEAD/index/working-tree/untracked semantics, not
+arbitrary history or ancestry, tags, remotes, reflogs, submodules, LFS, or
+author-specific Git configuration behavior. Omitted content and gitlinks remain
+explicit materialization gaps.
+
+Source Git reads use `GIT_OPTIONAL_LOCKS=0`; source preservation remains
+fail-closed. This protects Git authority and source-repository linkage but does
+not claim that the ordinary subprocess adapter is an OS-level hostile-code
+filesystem sandbox. Such a sandbox is not introduced by this decision.
+
+`VerificationPlan` and `VerificationEvidence` 1.1.0 bind the resolved profile;
+1.0.0 artifacts remain frozen legacy contracts. The bounded direct-Git gate is
+limited to the documented supported argv forms and rejects unsupported direct
+Git or repository/config escape forms before execution. Indirect commands remain
+opaque and retain their real child outcomes. Existing ChangeSet, reducer,
+capability, budget, and authority-separation semantics are unchanged. History,
+tags, remotes, submodules, and LFS remain deferred.

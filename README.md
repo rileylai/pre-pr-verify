@@ -26,7 +26,7 @@ propagate into the axes and final verdict. The final verdict is `READY`,
 - **V3:** authorized event trigger and deterministic inline mapping. MCP remains an integration interface, not the trigger.
 
 V1 is the implemented local product. The current public tagged version is
-`v0.1.3`. V2/V3 remain unimplemented. The repository's release-readiness checks
+`v0.1.5`. V2/V3 remain unimplemented. The repository's release-readiness checks
 cover the complete local workflow, installability, Skill instructions,
 acceptance scenarios, and self-hosting evidence.
 
@@ -97,7 +97,7 @@ To validate the built core independently of the source checkout:
 ```sh
 uv venv /tmp/pre-pr-verify-install
 uv pip install --python /tmp/pre-pr-verify-install/bin/python \
-  dist/pre_pr_verify-0.1.4-py3-none-any.whl
+  dist/pre_pr_verify-0.1.5-py3-none-any.whl
 /tmp/pre-pr-verify-install/bin/python -c \
   "import pre_pr_verify; print(pre_pr_verify.__version__)"
 ```

@@ -57,12 +57,18 @@ from pre_pr_verify.verification import (
     build_verification_plan,
     discover_canonical_checks,
 )
-from pre_pr_verify.verification_models import CapabilityName, ExecutionCapability
+from pre_pr_verify.verification_models import (
+    CapabilityName,
+    EnvironmentProfile,
+    ExecutionCapability,
+)
 ```
 
 `ProvidedRequirement`, `TrustedPolicyCheckInput`, and `PlannerCheckInput` are
 optional trusted inputs. Repository content may supply evidence and canonical
 check candidates, but it cannot grant permission or execution capabilities.
+Environment fidelity is requested separately from host capabilities through the
+two profiles `FILESYSTEM_ONLY` and `GIT_REPOSITORY`.
 
 ## Scope Intent Resolver
 
@@ -191,9 +197,14 @@ three legal actions. The full discovery candidate set remains unchanged.
 ### Verification authorization setup
 
 Discover repository-native commands with `discover_canonical_checks` and show
-the bounded local `VerificationPlan` plus its security profile. Repository
-content supplies candidate commands and provenance only; it never supplies
-execution authority. Offer:
+the bounded local `VerificationPlan` plus its security profile. The default
+environment profile is explicitly `FILESYSTEM_ONLY`. A repository declaration,
+trusted policy, model proposal, or explicit user/invocation floor may request
+`GIT_REPOSITORY`; the planner raises monotonically and records bounded profile
+provenance. Do not infer Git use from command names, source, tests, or stderr,
+and do not make every `pytest`, `make`, `npm`, or `cargo` command Git-aware.
+Repository content supplies candidate commands and prerequisite evidence only;
+it never supplies execution authority. Offer:
 
 1. explicitly authorize the proposed local checks;
 2. review without execution;
@@ -207,8 +218,10 @@ authorization may select only those disclosed, policy-waivable gaps; it cannot
 make a capability `available` or waive a non-waivable invariant. Review without
 execution leaves command evidence absent/not-run and therefore preserves the
 existing `INCONCLUSIVE` path. The default profile is disposable snapshots,
-network off, and external services off unless an explicit trusted policy
-authorizes otherwise.
+network off, and external services off unless an explicit trusted policy or
+other permitted requirement requests `GIT_REPOSITORY`. A repository declaration
+remains prerequisite evidence, not execution authority. The two profile values
+remain separate from `CapabilityName` and host isolation capabilities.
 
 ### Final confirmation and headless mode
 
@@ -298,6 +311,12 @@ established.
    the caller under the contracts in docs 03 and 04.
 3. Build the plan with:
 
+   Set `environment_profile_floor` to `EnvironmentProfile.FILESYSTEM_ONLY` when
+   no explicit profile requirement exists. Use
+   `EnvironmentProfile.GIT_REPOSITORY` only for an explicit permitted
+   user/invocation or trusted-policy floor; repository declarations and model
+   proposals remain per-check requirements resolved by the planner.
+
    ```python
    plan = build_verification_plan(
        changeset,
@@ -305,6 +324,7 @@ established.
        canonical_checks=discover_canonical_checks(repository),
        trusted_policy_checks=trusted_policy_checks,
        planner_additions=planner_additions,
+       minimum_environment_profile=environment_profile_floor,
    )
    ```
 

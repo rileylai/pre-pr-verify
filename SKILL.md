@@ -30,8 +30,11 @@ sequence.
    cancellation, preflight, or no-review.
 2. Discover bounded requirement and Standards evidence.
 3. Build the deterministic floor and repository/trusted/planner checks.
-4. Execute authorized checks only in fresh disposable snapshots, recording every
-   result, capability gap, and preservation failure truthfully.
+4. Execute authorized checks only in fresh disposable environments, recording
+   every result, capability gap, and preservation failure truthfully. The
+   default profile is `FILESYSTEM_ONLY`; request `GIT_REPOSITORY` only through
+   the bounded planner requirement channels, and never infer it from command
+   names or source.
 5. Assess Spec, Standards, Impact, Test Sufficiency, and Contextual Security.
    Semantic judgments propose findings; stable references must ground them.
 6. Build and reload the canonical `ReviewArtifact`; its reducer owns axis status
@@ -66,6 +69,14 @@ or invents permission.
 If bounded semantic collection fails after a non-empty ChangeSet exists, keep
 its `SemanticLimitGap` as review evidence (`INCONCLUSIVE`/2 as required), never
 preflight/code 3; do not omit candidates or fabricate comparisons.
+
+When planning verification, use the existing `minimum_environment_profile`
+input for a review-level floor when an explicit invocation or trusted policy
+requires one. The only values are `FILESYSTEM_ONLY` and `GIT_REPOSITORY`; the
+floor can raise, never lower, per-check requirements. Repository declarations
+remain prerequisite evidence and do not grant execution authority. Do not add a
+new setup wizard, scan source for Git use, inspect stderr, or automatically
+classify repository-wide command families as Git-aware.
 
 ## Read details only when needed
 

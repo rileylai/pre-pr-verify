@@ -7,7 +7,10 @@ from pre_pr_verify.discovery_models import DiscoveryResult
 from pre_pr_verify.models import ChangeSet, LegacyChangeSet
 from pre_pr_verify.review_models import ReviewArtifact
 from pre_pr_verify.semantic_models import SemanticAssessment
-from pre_pr_verify.verification_models import VerificationEvidence
+from pre_pr_verify.verification_models import (
+    VerificationEvidence,
+    VerificationPlan,
+)
 
 
 def render_changeset_schema() -> str:
@@ -78,6 +81,23 @@ def write_verification_evidence_schema(path: Path) -> None:
     path.write_text(render_verification_evidence_schema(), encoding="utf-8")
 
 
+def render_verification_plan_schema() -> str:
+    return (
+        json.dumps(
+            VerificationPlan.model_json_schema(),
+            ensure_ascii=True,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+
+def write_verification_plan_schema(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_verification_plan_schema(), encoding="utf-8")
+
+
 def render_semantic_assessment_schema() -> str:
     return (
         json.dumps(
@@ -116,8 +136,9 @@ if __name__ == "__main__":
     write_legacy_changeset_schema(Path("schemas/changeset-1.0.0.schema.json"))
     write_changeset_schema(Path("schemas/changeset-1.1.0.schema.json"))
     write_discovery_schema(Path("schemas/discovery-1.0.0.schema.json"))
+    write_verification_plan_schema(Path("schemas/verification-plan-1.1.0.schema.json"))
     write_verification_evidence_schema(
-        Path("schemas/verification-evidence-1.0.0.schema.json")
+        Path("schemas/verification-evidence-1.1.0.schema.json")
     )
     write_semantic_assessment_schema(
         Path("schemas/semantic-assessment-1.0.0.schema.json")

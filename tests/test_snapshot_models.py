@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from pre_pr_verify.models import RawPath
 from pre_pr_verify.verification_models import (
+    EnvironmentProfile,
     SnapshotFile,
     SnapshotKind,
     SnapshotManifest,
@@ -83,6 +84,8 @@ def test_incomplete_snapshot_requires_structured_failure() -> None:
         "materialization_ordinal": 0,
         "changeset_identity": "a" * 64,
         "discovery_identity": "b" * 64,
+        "environment_profile": EnvironmentProfile.FILESYSTEM_ONLY.value,
+        "object_format": None,
         "files": [],
         "complete": False,
         "materialization_failure": "capability",
@@ -96,3 +99,22 @@ def test_incomplete_snapshot_requires_structured_failure() -> None:
     payload["identity"] = hash_payload(payload)
     with pytest.raises(ValidationError, match="incomplete snapshot"):
         SnapshotManifest.model_validate(payload)
+
+
+def test_incomplete_git_snapshot_may_omit_unknown_object_format() -> None:
+    payload = {
+        "materialization_ordinal": 0,
+        "changeset_identity": "a" * 64,
+        "discovery_identity": "b" * 64,
+        "environment_profile": EnvironmentProfile.GIT_REPOSITORY.value,
+        "object_format": None,
+        "files": [],
+        "complete": False,
+        "materialization_failure": "capability",
+    }
+    payload["identity"] = hash_payload(payload)
+
+    manifest = SnapshotManifest.model_validate(payload)
+    assert manifest.environment_profile is EnvironmentProfile.GIT_REPOSITORY
+    assert manifest.object_format is None
+    assert manifest.complete is False

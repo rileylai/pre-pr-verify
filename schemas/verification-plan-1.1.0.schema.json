@@ -1,0 +1,356 @@
+{
+  "$defs": {
+    "ChangeSignals": {
+      "additionalProperties": false,
+      "properties": {
+        "added_path_count": {
+          "minimum": 0,
+          "title": "Added Path Count",
+          "type": "integer"
+        },
+        "changed_path_count": {
+          "minimum": 0,
+          "title": "Changed Path Count",
+          "type": "integer"
+        },
+        "changed_paths": {
+          "items": {
+            "$ref": "#/$defs/RawPath"
+          },
+          "title": "Changed Paths",
+          "type": "array"
+        },
+        "committed_path_count": {
+          "minimum": 0,
+          "title": "Committed Path Count",
+          "type": "integer"
+        },
+        "deleted_path_count": {
+          "minimum": 0,
+          "title": "Deleted Path Count",
+          "type": "integer"
+        },
+        "documentation_path_count": {
+          "minimum": 0,
+          "title": "Documentation Path Count",
+          "type": "integer"
+        },
+        "executable_path_count": {
+          "minimum": 0,
+          "title": "Executable Path Count",
+          "type": "integer"
+        },
+        "staged_path_count": {
+          "minimum": 0,
+          "title": "Staged Path Count",
+          "type": "integer"
+        },
+        "test_path_count": {
+          "minimum": 0,
+          "title": "Test Path Count",
+          "type": "integer"
+        },
+        "unstaged_path_count": {
+          "minimum": 0,
+          "title": "Unstaged Path Count",
+          "type": "integer"
+        },
+        "untracked_path_count": {
+          "minimum": 0,
+          "title": "Untracked Path Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "changed_paths",
+        "changed_path_count",
+        "test_path_count",
+        "documentation_path_count",
+        "added_path_count",
+        "deleted_path_count",
+        "executable_path_count",
+        "committed_path_count",
+        "staged_path_count",
+        "unstaged_path_count",
+        "untracked_path_count"
+      ],
+      "title": "ChangeSignals",
+      "type": "object"
+    },
+    "CheckKind": {
+      "enum": [
+        "structural_invariant",
+        "command"
+      ],
+      "title": "CheckKind",
+      "type": "string"
+    },
+    "CheckOrigin": {
+      "enum": [
+        "deterministic_floor",
+        "repository_canonical",
+        "trusted_policy",
+        "model_proposed"
+      ],
+      "title": "CheckOrigin",
+      "type": "string"
+    },
+    "EnvironmentProfile": {
+      "enum": [
+        "FILESYSTEM_ONLY",
+        "GIT_REPOSITORY"
+      ],
+      "title": "EnvironmentProfile",
+      "type": "string"
+    },
+    "PlannedCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Argv"
+        },
+        "check_id": {
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Check Id",
+          "type": "string"
+        },
+        "cwd": {
+          "default": ".",
+          "title": "Cwd",
+          "type": "string"
+        },
+        "environment_profile": {
+          "$ref": "#/$defs/EnvironmentProfile",
+          "default": "FILESYSTEM_ONLY"
+        },
+        "kind": {
+          "$ref": "#/$defs/CheckKind"
+        },
+        "origin": {
+          "$ref": "#/$defs/CheckOrigin"
+        },
+        "profile_provenance": {
+          "items": {
+            "$ref": "#/$defs/ProfileProvenance"
+          },
+          "title": "Profile Provenance",
+          "type": "array"
+        },
+        "requirement_level": {
+          "$ref": "#/$defs/RequirementLevel"
+        },
+        "selection_reason": {
+          "minLength": 1,
+          "title": "Selection Reason",
+          "type": "string"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RawPath"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Sha256"
+        },
+        "source_size": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Size"
+        },
+        "trusted_policy_label": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trusted Policy Label"
+        },
+        "trusted_policy_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trusted Policy Sha256"
+        }
+      },
+      "required": [
+        "check_id",
+        "requirement_level",
+        "kind",
+        "origin",
+        "selection_reason"
+      ],
+      "title": "PlannedCheck",
+      "type": "object"
+    },
+    "ProfileProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/ProfileProvenanceChannel"
+        },
+        "requested_profile": {
+          "$ref": "#/$defs/EnvironmentProfile"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel",
+        "requested_profile",
+        "source_sha256"
+      ],
+      "title": "ProfileProvenance",
+      "type": "object"
+    },
+    "ProfileProvenanceChannel": {
+      "enum": [
+        "repository_declaration",
+        "trusted_policy",
+        "model_proposal",
+        "user_invocation"
+      ],
+      "title": "ProfileProvenanceChannel",
+      "type": "string"
+    },
+    "RawPath": {
+      "additionalProperties": false,
+      "properties": {
+        "display": {
+          "title": "Display",
+          "type": "string"
+        },
+        "raw_b64": {
+          "title": "Raw B64",
+          "type": "string"
+        },
+        "utf8": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Utf8"
+        }
+      },
+      "required": [
+        "raw_b64",
+        "display"
+      ],
+      "title": "RawPath",
+      "type": "object"
+    },
+    "RequirementLevel": {
+      "enum": [
+        "required",
+        "advisory"
+      ],
+      "title": "RequirementLevel",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "changeset_identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Changeset Identity",
+      "type": "string"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/PlannedCheck"
+      },
+      "title": "Checks",
+      "type": "array"
+    },
+    "contract": {
+      "const": "verification_plan",
+      "default": "verification_plan",
+      "title": "Contract",
+      "type": "string"
+    },
+    "discovery_identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Discovery Identity",
+      "type": "string"
+    },
+    "identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Identity",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.1.0",
+      "default": "1.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signals": {
+      "$ref": "#/$defs/ChangeSignals"
+    }
+  },
+  "required": [
+    "changeset_identity",
+    "discovery_identity",
+    "signals",
+    "checks",
+    "identity"
+  ],
+  "title": "VerificationPlan",
+  "type": "object"
+}
