@@ -115,6 +115,39 @@ def test_no_canonical_command_does_not_invent_language_defaults(
     assert discover_canonical_checks(repo) == []
 
 
+def test_model_proposal_coexists_with_preferred_repository_canonical_check(
+    tmp_path: Path,
+) -> None:
+    repo = repository(tmp_path)
+    (repo / "pyproject.toml").write_text(
+        """
+[tool.pre-pr-verify.verification]
+checks = [{ id = "repo-check", level = "required", argv = ["python", "-c", "pass"] }]
+""".strip()
+        + "\n"
+    )
+    changeset = capture_changeset(repo, "main", ScopeMode.PENDING)
+    discovery = discover_review_sources(repo)
+    plan = build_verification_plan(
+        changeset,
+        discovery,
+        canonical_checks=discover_canonical_checks(repo),
+        trusted_policy_checks=[],
+        planner_additions=[
+            PlannerCheckInput(
+                check_id="targeted-model-check",
+                requirement_level=RequirementLevel.ADVISORY,
+                selection_reason="Bounded changed-test evidence supports a targeted check.",
+                argv=("python", "-c", "pass"),
+            )
+        ],
+    )
+
+    checks = {check.check_id: check for check in plan.checks}
+    assert checks["repo-check"].origin is CheckOrigin.REPOSITORY_CANONICAL
+    assert checks["targeted-model-check"].origin is CheckOrigin.MODEL_PROPOSED
+
+
 def test_trusted_required_check_cannot_be_removed_by_planner(tmp_path: Path) -> None:
     repo = repository(tmp_path)
     changeset = capture_changeset(repo, "main", ScopeMode.PENDING)

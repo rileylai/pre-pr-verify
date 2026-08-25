@@ -194,17 +194,43 @@ explicit criteria, an explicit missing-requirements decision, or cancel.
 this case, presents no misleading candidate subset, and exposes only those
 three legal actions. The full discovery candidate set remains unchanged.
 
+### Targeted verification planning
+
+After the requirement decision and before verification authorization, inspect
+bounded evidence relevant to impact and test sufficiency: changed paths and
+content, affected callers or components, adjacent code, existing tests,
+repository test/config/build tooling, documented verification commands, and
+explicit acceptance criteria. Use bounded semantic reasoning to decide whether
+targeted verification is justified.
+
+Derive zero or more evidence-backed `PlannerCheckInput` values. For every
+proposal, bind the structured argv and repository-relative cwd to the evidence,
+record a concise selection reason, and choose `REQUIRED` only when the
+acceptance criteria or reviewed risk makes the check necessary; otherwise use
+`ADVISORY`. Repository-canonical declarations remain preferred and trusted
+policy remains higher authority. A repository declaration is not required for a
+model proposal, but file extensions, command-family defaults, and language or
+framework conventions are not evidence.
+
+If reliable evidence is insufficient, keep `planner_additions=()` and report
+that no targeted command was proposed. Do not invent a command or reconstruct a
+generic test matrix. In headless mode, only use proposals supplied by the
+explicit bounded semantic planning context; missing context does not authorize
+inference.
+
 ### Verification authorization setup
 
-Discover repository-native commands with `discover_canonical_checks` and show
-the bounded local `VerificationPlan` plus its security profile. The default
+Discover repository-native commands with `discover_canonical_checks`, combine
+them with the targeted `PlannerCheckInput` values above, and show the complete
+bounded local `VerificationPlan` plus its security profile. The default
 environment profile is explicitly `FILESYSTEM_ONLY`. A repository declaration,
 trusted policy, model proposal, or explicit user/invocation floor may request
 `GIT_REPOSITORY`; the planner raises monotonically and records bounded profile
 provenance. Do not infer Git use from command names, source, tests, or stderr,
 and do not make every `pytest`, `make`, `npm`, or `cargo` command Git-aware.
 Repository content supplies candidate commands and prerequisite evidence only;
-it never supplies execution authority. Offer:
+it never supplies execution authority. Model proposals remain proposals and
+grant no execution permission. Offer:
 
 1. explicitly authorize the proposed local checks;
 2. review without execution;
@@ -254,9 +280,11 @@ environment or authority source.
 Use these V1 defaults unless a trusted invocation or host policy supplies a
 different value:
 
-- `trusted_policy_checks=()` and `planner_additions=()`. Add values only from
-  their named trusted channels; repository-discovered checks use
-  `discover_canonical_checks` instead.
+- `trusted_policy_checks=()` when no trusted policy checks were supplied.
+- `planner_additions=()` only when bounded semantic inspection found no
+  reliable targeted proposal. Otherwise pass the evidence-backed
+  `PlannerCheckInput` values derived before authorization; repository-discovered
+  checks still use `discover_canonical_checks`.
 - `timeout_seconds=300` and `output_limit_bytes=65_536` per command. A trusted
   invocation may lower either bound.
 - `redaction_values=()` only when the caller supplied no explicit secret values.
@@ -309,7 +337,10 @@ established.
    requirements come from the invocation as `ProvidedRequirement` values.
    Pass a trusted source selection or additional evidence only when supplied by
    the caller under the contracts in docs 03 and 04.
-3. Build the plan with:
+3. After the requirement decision and before verification authorization, inspect
+   bounded impact/test/tooling evidence and explicit acceptance criteria as
+   described in **Targeted verification planning**. Derive zero or more
+   evidence-backed `PlannerCheckInput` values. Then build the complete plan with:
 
    Set `environment_profile_floor` to `EnvironmentProfile.FILESYSTEM_ONLY` when
    no explicit profile requirement exists. Use

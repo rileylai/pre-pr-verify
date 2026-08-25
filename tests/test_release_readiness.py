@@ -99,6 +99,24 @@ def test_skill_runbook_routes_every_canonical_stage_and_policy_boundary() -> Non
     assert "review_focus" in runbook
 
 
+def test_runbook_requires_targeted_planning_before_authorization() -> None:
+    runbook = Path("docs/09_v1_skill_runbook.md").read_text()
+    planning_start = runbook.index("### Targeted verification planning")
+    authorization_start = runbook.index("### Verification authorization setup")
+    planning = runbook[planning_start:authorization_start]
+
+    assert planning.index("changed paths and") < planning.index("PlannerCheckInput")
+    assert "zero or more evidence-backed" in planning
+    assert "A repository declaration is not required" in planning
+    assert "file extensions" in planning
+    assert "planner_additions=()" in planning
+    assert "explicit bounded semantic planning context" in planning
+    assert "combine\nthem with the targeted `PlannerCheckInput` values above" in runbook
+    assert "Model proposals remain proposals" in runbook
+    assert "grant no execution permission" in runbook
+    assert authorization_start > planning_start
+
+
 def test_numeric_setup_forward_path_covers_representative_narrow_review() -> None:
     skill = Path("SKILL.md").read_text()
     runbook = Path("docs/09_v1_skill_runbook.md").read_text()

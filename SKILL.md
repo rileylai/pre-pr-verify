@@ -29,7 +29,9 @@ sequence.
    human confirmation, capture the complete pending `ChangeSet`; stop on
    cancellation, preflight, or no-review.
 2. Discover bounded requirement and Standards evidence.
-3. Build the deterministic floor and repository/trusted/planner checks.
+3. Inspect bounded impact/test/tooling evidence, add only justified
+   model-proposed targeted checks, then build the complete plan and show it
+   before authorization.
 4. Execute authorized checks only in fresh disposable environments, recording
    every result, capability gap, and preservation failure truthfully. The
    default profile is `FILESYSTEM_ONLY`; request `GIT_REPOSITORY` only through
