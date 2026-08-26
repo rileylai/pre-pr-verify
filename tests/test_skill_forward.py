@@ -222,6 +222,9 @@ def test_full_review_requires_canonical_semantic_report_in_final_result() -> Non
     runbook = Path("docs/09_v1_skill_runbook.md").read_text()
     combined = f"{skill}\n{runbook}"
 
+    assert "the final user-facing response MUST be" in skill
+    assert "`finalized.report` verbatim" in skill
+    assert "no handwritten summary" in skill
     assert "canonical Markdown produced by `render_markdown_report(artifact)`" in combined
     assert "must include the `Semantic Review` section" in combined
     assert "all five axes" in combined

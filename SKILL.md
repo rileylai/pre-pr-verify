@@ -34,8 +34,9 @@ sequence.
    before assessment; a bare `$pre-pr-verify` invocation needs no extra prompt.
    Inspect implementation, context, contracts, edge/error, tests, impact, and
    applicable security boundaries.
-5. Construct all five semantic axes only after the gate, then build/reload the
-   canonical artifact and present its canonical Markdown report.
+5. Construct five semantic axes only after the gate, then build/reload the
+   canonical artifact; the final user-facing response MUST be
+   `finalized.report` verbatim; no handwritten summary.
 
 `READY` requires five PASS axes and complete required evidence.
 `NEEDS_CHANGES` requires a confirmed blocking defect. `INCONCLUSIVE` means
