@@ -222,15 +222,26 @@ def test_full_review_requires_canonical_semantic_report_in_final_result() -> Non
     runbook = Path("docs/09_v1_skill_runbook.md").read_text()
     combined = f"{skill}\n{runbook}"
 
-    assert "emit_final_report(finalized)" in skill
-    assert "deterministic\n   emission, not model prose" in skill
+    assert "emit_final_report(finalized)` to stdout" in skill
+    assert "Once stdout emission succeeds, END REVIEW" in skill
+    assert "optional recovery files never\n   replace it" in skill
+    assert "must not reconstruct or summarize" in skill
     assert "records only" in skill
-    assert "writes `finalized.report` exactly" in combined
+    assert "writes `finalized.report` exactly to stdout by" in combined
     assert "canonical V1 final-delivery boundary" in combined
     assert "five semantic axes" in combined
+    assert "optional\nrecovery copy" in combined
+    assert "plus a printed path is\nnot canonical completion" in combined
+    assert "reopen a recovery file" in combined
+    assert "END REVIEW" in combined
     assert "must not replace or append" in combined
     assert "post-execution formatter" in combined
     assert "outside the author repository" in combined
+
+    finalization = runbook[runbook.index("### 7. Deterministic finalization") :]
+    assert finalization.index("finalize_review(") < finalization.index(
+        "emit_final_report(finalized)"
+    )
 
 
 def test_spec_limit_gap_does_not_stop_independent_semantic_axes() -> None:

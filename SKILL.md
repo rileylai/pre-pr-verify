@@ -35,8 +35,9 @@ sequence.
    Inspect implementation, context, contracts, edge/error, tests, impact, and
    applicable security boundaries.
 5. Construct five semantic axes only after the gate, then call
-   `finalize_review(...)` and `emit_final_report(finalized)`; deterministic
-   emission, not model prose, is the canonical final-delivery boundary.
+   `finalize_review(...)` followed by `emit_final_report(finalized)` to stdout.
+   Once stdout emission succeeds, END REVIEW; optional recovery files never
+   replace it, and the model must not reconstruct or summarize the report.
 
 `READY` requires five PASS axes and complete required evidence.
 `NEEDS_CHANGES` requires a confirmed blocking defect. `INCONCLUSIVE` means

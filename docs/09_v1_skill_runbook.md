@@ -461,7 +461,9 @@ finalized = finalize_review(
 )
 artifact = finalized.artifact
 exit_code = finalized.exit_code
+# An optional recovery copy may be persisted before this required stdout write.
 emit_final_report(finalized)
+# END REVIEW
 ```
 
 The helper uses the same externally established version/build inputs for both
@@ -475,11 +477,14 @@ without those summaries.
 
 ### 8. Emit the canonical report
 
-`emit_final_report(finalized)` writes `finalized.report` exactly and is the
-canonical V1 final-delivery boundary. It does not rebuild the report or inspect
-artifact fields to construct another summary. Once emission succeeds, END the
-review; the Skill/model must not replace or append to it with handwritten
-verdict prose.
+`emit_final_report(finalized)` writes `finalized.report` exactly to stdout by
+default and is the required canonical V1 final-delivery boundary. An optional
+recovery copy may be written to a verifier-owned temporary file before this
+write, but `emit_final_report(finalized, stream=file)` plus a printed path is
+not canonical completion. Do not rebuild the report, reopen a recovery file,
+inspect artifact fields to construct another summary, or manually reconstruct
+or summarize it. Once stdout emission succeeds, END REVIEW; the Skill/model
+must not replace or append to it with handwritten verdict prose.
 
 Record `artifact.verdict` and `finalized.exit_code` before presenting the
 report. A debug, semantic-construction, or reporting failure cannot authorize
