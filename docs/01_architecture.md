@@ -31,8 +31,8 @@ not infer token budgets or provider context windows from artifact characters.
 The ReviewArtifact layer owns concise rendering without deleting canonical evidence. Its
 versioned `ReviewArtifact` binds the exact ChangeSet, DiscoveryResult,
 VerificationPlan, VerificationEvidence, and SemanticAssessment identities and
-records verifier version/build identity. It carries bounded review-facing
-summaries and the already-bounded semantic findings, never source files, specs,
+records verifier version/build identity. It carries bounded per-axis semantic
+summaries plus the already-bounded semantic findings, never source files, specs,
 or command output.
 
 The deterministic core owns:
@@ -100,7 +100,7 @@ process adapter, not a general hostile-code filesystem sandbox.
 
 ## Versioned data contracts
 
-ChangeSet and ReviewArtifact are independent versioned contracts. ChangeSet describes captured repository state, while ReviewArtifact describes completed review evidence, axes, reduction, and reporting. Each has its own schema version and release lifecycle; neither uses a project-wide global `schema_version`. The current verification contracts are `VerificationPlan 1.1.0` and `VerificationEvidence 1.1.0`; their frozen `1.0.0` counterparts remain loadable legacy contracts with their historical payload and identity semantics. New verification artifacts explicitly bind the resolved environment profile. ChangeSet remains unchanged by the Git-aware execution profiles.
+ChangeSet and ReviewArtifact are independent versioned contracts. ChangeSet describes captured repository state, while ReviewArtifact describes completed review evidence, axes, reduction, and reporting. Each has its own schema version and release lifecycle; neither uses a project-wide global `schema_version`. The current verification contracts are `VerificationPlan 1.1.0` and `VerificationEvidence 1.1.0`; their frozen `1.0.0` counterparts remain loadable legacy contracts with their historical payload and identity semantics. The current ReviewArtifact contract is `1.1.0`; frozen `1.0.0` artifacts remain loadable without semantic summaries. New verification artifacts explicitly bind the resolved environment profile. ChangeSet remains unchanged by the Git-aware execution profiles.
 
 ## Read-only meaning
 

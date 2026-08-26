@@ -350,3 +350,21 @@ shown first and unused slots up to five total are filled from canonical
 candidate order without a recommendation marker. A zero-recommendation
 overflow therefore still exposes the first canonical candidates for inspection;
 the complete candidate set and its count remain unchanged.
+
+## ADR-032: Bound semantic rationale to the canonical review artifact
+
+**Status:** Accepted
+
+The Skill performs a bounded senior-style inspection before constructing the
+semantic assessment. It records one concise rationale for each materially
+reviewed axis and proposes only evidence-grounded findings; verification results
+remain separate evidence and green checks never substitute for semantic review.
+
+ReviewArtifact `1.1.0` carries the five semantic status/rationale summaries
+copied from the bound `SemanticAssessment`. Construction and external loading
+recompute the summaries from the same bound inputs, so serialized rationale
+cannot self-assert a different conclusion. Markdown renders only this canonical
+artifact, escapes or digests untrusted prose, and retains the existing bounded
+finding/gap/reference presentation. Frozen ReviewArtifact `1.0.0` remains
+loadable without the new summaries. No second report artifact, model benchmark,
+AST/dependency engine, scanner installation, or execution authority is added.

@@ -105,7 +105,11 @@ ChangeSet and ReviewArtifact are separate contracts:
 - The ChangeSet contract captures comparison scope, layered changes, effective state, and identity.
 - The ReviewArtifact contract captures review mode, assessment completion, evidence, findings, axes, reducer reasons, final verdict, and report inputs.
 
-Each contract has its own `schema_version`, initially `"1.0.0"`, and evolves independently. There is no global project schema version. A reader rejects an unknown major or minor version for the specific contract unless support is explicit. V1 has no migration framework.
+Each contract has its own `schema_version` and evolves independently. ReviewArtifact
+`1.1.0` is current while frozen `review-artifact-1.0.0` remains readable without
+semantic summaries. There is no global project schema version. A reader rejects
+an unknown major or minor version for the specific contract unless support is
+explicit. V1 has no migration framework.
 
 For each contract, canonical JSON is the machine-readable source of truth; Python typed models and code invariants are authoritative; JSON Schema is generated deterministically and checked in. Documentation describes semantics without duplicating the complete field schema. Markdown is a rendered projection of ReviewArtifact, not of ChangeSet alone.
 
@@ -117,11 +121,15 @@ ReviewArtifact presentation is a separate concern. Canonical evidence remains co
 
 ## ReviewArtifact and reduction
 
-`review-artifact-1.0.0` is the canonical completed-review contract. It binds the
+`review-artifact-1.1.0` is the current canonical completed-review contract. It binds the
 exact ChangeSet, DiscoveryResult, VerificationPlan, VerificationEvidence, and
 SemanticAssessment identities plus verifier version/build identity. It stores
-the five reduced axes, complete semantic finding ownership, bounded check
-summaries, structured required-evidence gaps, reducer reasons, and final verdict.
+the five reduced axes, one bounded semantic status/rationale summary for each
+axis, complete semantic finding ownership, bounded check summaries, structured
+required-evidence gaps, reducer reasons, and final verdict. The summaries are
+copied deterministically from the bound SemanticAssessment; loading recomputes
+them, so serialized rationale cannot assert a different semantic conclusion.
+The frozen `1.0.0` payload remains loadable and simply has no summary field.
 It does not copy captured source/spec content or stdout/stderr; stable paths,
 source IDs, bounded check IDs or their SHA-256 references, execution ordinals,
 preservation ordinals, and upstream
@@ -157,7 +165,8 @@ ReviewArtifact lifecycle. Verdict selection is complete before rendering, so a
 renderer failure cannot alter the canonical verdict.
 
 The Markdown renderer is a projection of ReviewArtifact only. Its default form
-contains verdict, five axes, a bounded check summary with complete-set
+contains verdict, five axes, a per-axis Semantic Review with bounded rationale,
+a bounded check summary with complete-set
 references/counts, blocking findings (including required verification failures),
 nonblocking/unverified findings, required gaps, and concise canonical references.
 It never interprets prose or command output to choose a status.

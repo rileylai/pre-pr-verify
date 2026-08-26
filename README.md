@@ -90,6 +90,11 @@ semantic-review command.
 The exact full-review imports and call sequence are in
 [`docs/09_v1_skill_runbook.md`](docs/09_v1_skill_runbook.md).
 
+The default Markdown report includes a concise `Semantic Review` section for
+all five axes, showing the final axis status, the semantic conclusion, the
+review rationale, and stable finding references. Verification results remain
+visible as separate evidence; passing checks do not replace semantic review.
+
 ## Development
 
 The package supports Python 3.11 or newer. Reproducible development is pinned to

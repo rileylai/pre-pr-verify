@@ -40,9 +40,14 @@ sequence.
    default profile is `FILESYSTEM_ONLY`; request `GIT_REPOSITORY` only through
    the bounded planner requirement channels, and never infer it from command
    names or source.
-5. Assess Spec, Standards, Impact, Test Sufficiency, and Contextual Security.
-   Semantic judgments propose findings; stable references must ground them.
-6. Build and reload the canonical `ReviewArtifact`; its reducer owns axis status
+5. Perform a bounded senior-style inspection of the changed implementation and
+   relevant callers, contracts, edge/error paths, tests, and security boundaries
+   before assessing the five axes. Green verification is evidence only: it never
+   substitutes for semantic review or suppresses a concrete finding/gap.
+6. Assess Spec, Standards, Impact, Test Sufficiency, and Contextual Security.
+   Record a concise rationale for every axis; semantic findings must use stable
+   references.
+7. Build and reload the canonical `ReviewArtifact`; its reducer owns axis status
    and final verdict. Render Markdown only from that artifact.
 
 `READY` requires five PASS axes and complete required evidence.

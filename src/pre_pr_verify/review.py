@@ -15,10 +15,14 @@ from pre_pr_verify.review_models import (
     CollectionReferenceIndex,
     EvidenceGap,
     EvidenceGapKind,
+    LegacyReviewArtifact,
     ReviewArtifact,
     ReviewVerdict,
+    SemanticAxisSummary,
+    LEGACY_REVIEW_ARTIFACT_SCHEMA_VERSION,
     MAX_CHECK_SUMMARIES,
     MAX_EVIDENCE_GAPS,
+    REVIEW_ARTIFACT_SCHEMA_VERSION,
     VerifierIdentity,
     VerificationCheckSummary,
     hash_payload,
@@ -280,7 +284,14 @@ def _canonical_payload(
     evidence: VerificationEvidence,
     assessment: SemanticAssessment,
     verifier: VerifierIdentity,
+    *,
+    schema_version: str = REVIEW_ARTIFACT_SCHEMA_VERSION,
 ) -> dict[str, Any]:
+    if schema_version not in {
+        LEGACY_REVIEW_ARTIFACT_SCHEMA_VERSION,
+        REVIEW_ARTIFACT_SCHEMA_VERSION,
+    }:
+        raise ValueError(f"unsupported ReviewArtifact schema version: {schema_version!r}")
     assessment = _validate_bindings(changeset, discovery, plan, evidence, assessment)
     all_gaps = _evidence_gaps(assessment, evidence)
     all_checks = _check_summaries(plan, evidence)
@@ -319,31 +330,43 @@ def _canonical_payload(
         evidence_identity=evidence.identity,
         semantic_assessment_identity=assessment.identity,
     )
-    provisional = ReviewArtifact.model_construct(
-        contract="review_artifact",
-        schema_version="1.0.0",
-        review_mode="full",
-        verifier=verifier,
-        bindings=bindings,
-        verdict=verdict,
-        verdict_reasons=verdict_reasons,
-        axes=axes,
-        checks=checks,
-        check_index=_collection_index(
+    artifact_values: dict[str, Any] = {
+        "contract": "review_artifact",
+        "schema_version": schema_version,
+        "review_mode": "full",
+        "verifier": verifier,
+        "bindings": bindings,
+        "verdict": verdict,
+        "verdict_reasons": verdict_reasons,
+        "axes": axes,
+        "checks": checks,
+        "check_index": _collection_index(
             all_checks,
             len(checks),
             blocking_count=required_change_failures,
             required_gap_count=required_check_gaps,
         ),
-        findings=assessment.findings,
-        evidence_gaps=gaps,
-        evidence_gap_index=_collection_index(
+        "findings": assessment.findings,
+        "evidence_gaps": gaps,
+        "evidence_gap_index": _collection_index(
             all_gaps,
             len(gaps),
             required_gap_count=len(all_gaps),
         ),
-        identity="",
-    )
+        "identity": "",
+    }
+    if schema_version == REVIEW_ARTIFACT_SCHEMA_VERSION:
+        artifact_values["semantic_summaries"] = [
+            SemanticAxisSummary(
+                axis=axis.axis,
+                status=axis.status,
+                rationale=axis.rationale,
+            )
+            for axis in assessment.axes
+        ]
+        provisional = ReviewArtifact.model_construct(**artifact_values)
+    else:
+        provisional = LegacyReviewArtifact.model_construct(**artifact_values)
     return provisional.semantic_payload()
 
 
@@ -380,18 +403,33 @@ def load_review_artifact(
     *,
     verifier_version: str,
     verifier_commit_or_build: str,
-) -> ReviewArtifact:
+) -> ReviewArtifact | LegacyReviewArtifact:
     payload = json.loads(value) if isinstance(value, (str, bytes)) else dict(value)
-    if payload.get("schema_version") != "1.0.0":
+    schema_version = payload.get("schema_version")
+    if schema_version not in {
+        LEGACY_REVIEW_ARTIFACT_SCHEMA_VERSION,
+        REVIEW_ARTIFACT_SCHEMA_VERSION,
+    }:
         raise ValueError(f"unsupported ReviewArtifact schema version: {payload.get('schema_version')!r}")
     verifier = VerifierIdentity(
         version=verifier_version,
         commit_or_build=verifier_commit_or_build,
     )
     expected = _canonical_payload(
-        changeset, discovery, plan, evidence, assessment, verifier
+        changeset,
+        discovery,
+        plan,
+        evidence,
+        assessment,
+        verifier,
+        schema_version=schema_version,
     )
-    return ReviewArtifact.model_validate(
+    artifact_type = (
+        ReviewArtifact
+        if schema_version == REVIEW_ARTIFACT_SCHEMA_VERSION
+        else LegacyReviewArtifact
+    )
+    return artifact_type.model_validate(
         payload,
         context={"review_artifact": expected},
     )
@@ -415,6 +453,16 @@ def _check_label(check: VerificationCheckSummary) -> str:
     return check.check_id or f"sha256:{check.check_id_sha256}"
 
 
+def _axis_label(axis: SemanticAxis) -> str:
+    return {
+        SemanticAxis.SPEC: "Spec",
+        SemanticAxis.STANDARDS: "Standards",
+        SemanticAxis.IMPACT: "Impact",
+        SemanticAxis.TEST_SUFFICIENCY: "Test Sufficiency",
+        SemanticAxis.CONTEXTUAL_SECURITY: "Contextual Security",
+    }[axis]
+
+
 def _report_text(value: str) -> str:
     escaped: list[str] = []
     for character in value:
@@ -436,7 +484,49 @@ def _report_text(value: str) -> str:
     return "detail-sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def render_markdown_report(artifact: ReviewArtifact) -> str:
+def _semantic_review_lines(
+    artifact: ReviewArtifact | LegacyReviewArtifact,
+) -> list[str]:
+    lines = ["## Semantic Review", ""]
+    summaries = getattr(artifact, "semantic_summaries", None)
+    finding_by_id = {finding.finding_id: finding for finding in artifact.findings}
+    for axis in artifact.axes:
+        lines.append(f"### {_axis_label(axis.axis)} — **{axis.status.value.upper()}**")
+        if summaries is not None:
+            summary = next(item for item in summaries if item.axis is axis.axis)
+            lines.append(f"- Semantic conclusion: **{summary.status.value.upper()}**")
+            lines.append(f"- Reason: {_report_text(summary.rationale)}")
+            references: list[str] = []
+            for finding_id in axis.finding_ids:
+                finding = finding_by_id[finding_id]
+                references.extend(
+                    _reference_label(reference.kind.value, reference.identifier)
+                    for reference in finding.evidence
+                )
+            references = sorted(set(references))
+            if references:
+                shown_references = references[:4]
+                suffix = (
+                    f", +{len(references) - len(shown_references)} references"
+                    if len(references) > len(shown_references)
+                    else ""
+                )
+                lines.append(f"- Evidence: {', '.join(shown_references)}{suffix}")
+            else:
+                lines.append(
+                    "- Evidence: no axis-specific finding; see the bound "
+                    f"SemanticAssessment `{artifact.bindings.semantic_assessment_identity}`."
+                )
+        else:
+            lines.append(
+                "- Reason: this legacy ReviewArtifact does not persist semantic rationale; "
+                f"see SemanticAssessment `{artifact.bindings.semantic_assessment_identity}`."
+            )
+        lines.append("")
+    return lines
+
+
+def render_markdown_report(artifact: ReviewArtifact | LegacyReviewArtifact) -> str:
     """Render only canonical artifact fields; verdict reduction happens elsewhere."""
 
     lines = [
@@ -451,6 +541,7 @@ def render_markdown_report(artifact: ReviewArtifact) -> str:
         f"- {axis.axis.value}: **{axis.status.value.upper()}**"
         for axis in artifact.axes
     )
+    lines.extend(["", *_semantic_review_lines(artifact)])
     lines.extend(["", "## Verification", ""])
     shown_checks = artifact.checks[:12]
     lines.extend(
@@ -484,6 +575,7 @@ def render_markdown_report(artifact: ReviewArtifact) -> str:
     lines.extend(["", "## Blocking findings", ""])
     blocking_lines = [
             f"- `{finding.finding_id}` [{finding.axis.value}]: {_report_text(finding.title)} — "
+            f"{_report_text(finding.explanation)}; "
             + ", ".join(
                 _reference_label(reference.kind.value, reference.identifier)
                 for reference in finding.evidence[:2]
@@ -518,6 +610,7 @@ def render_markdown_report(artifact: ReviewArtifact) -> str:
     lines.extend(
         [
             f"- `{finding.finding_id}` ({finding.state.value}) [{finding.axis.value}]: {_report_text(finding.title)} — "
+            f"{_report_text(finding.explanation)}; "
             + ", ".join(
                 _reference_label(reference.kind.value, reference.identifier)
                 for reference in finding.evidence[:2]

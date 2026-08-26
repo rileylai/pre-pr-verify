@@ -5,14 +5,16 @@ import json
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import Field, ValidationInfo, model_validator
+from pydantic import ConfigDict, Field, ValidationInfo, model_validator
 
 from pre_pr_verify.models import FrozenModel, SHA256_PATTERN
 from pre_pr_verify.semantic_models import (
     FindingIdentifier,
     FindingState,
+    MAX_AXIS_RATIONALE_CHARS,
     SemanticAxis,
     SemanticFinding,
+    SemanticStatus,
 )
 from pre_pr_verify.verification_models import (
     CheckKind,
@@ -23,7 +25,8 @@ from pre_pr_verify.verification_models import (
 )
 
 
-REVIEW_ARTIFACT_SCHEMA_VERSION = "1.0.0"
+LEGACY_REVIEW_ARTIFACT_SCHEMA_VERSION = "1.0.0"
+REVIEW_ARTIFACT_SCHEMA_VERSION = "1.1.0"
 MAX_REDUCER_REASONS = 16
 MAX_REASON_CHARS = 512
 MAX_CHECK_SUMMARIES = 256
@@ -31,6 +34,7 @@ MAX_EVIDENCE_GAPS = 256
 MAX_GAP_REFERENCES = 16
 MAX_REFERENCE_CHARS = 512
 MAX_VERIFIER_FIELD_CHARS = 256
+MAX_SEMANTIC_SUMMARIES = len(SemanticAxis)
 
 
 class ReviewMode(StrEnum):
@@ -174,9 +178,15 @@ class CollectionReferenceIndex(FrozenModel):
         return self
 
 
-class ReviewArtifact(FrozenModel):
+class SemanticAxisSummary(FrozenModel):
+    axis: SemanticAxis
+    status: SemanticStatus
+    rationale: str = Field(min_length=1, max_length=MAX_AXIS_RATIONALE_CHARS)
+
+
+class _ReviewArtifactBase(FrozenModel):
     contract: Literal["review_artifact"] = "review_artifact"
-    schema_version: Literal["1.0.0"] = "1.0.0"
+    schema_version: str
     review_mode: Literal[ReviewMode.FULL] = ReviewMode.FULL
     verifier: VerifierIdentity
     bindings: ArtifactBindings
@@ -194,7 +204,7 @@ class ReviewArtifact(FrozenModel):
         return self.model_dump(mode="json", exclude={"identity"})
 
     @model_validator(mode="after")
-    def validate_artifact(self, info: ValidationInfo) -> ReviewArtifact:
+    def validate_artifact(self, info: ValidationInfo) -> _ReviewArtifactBase:
         expected = info.context.get("review_artifact") if info.context else None
         if not isinstance(expected, dict):
             raise ValueError("ReviewArtifact requires canonical bound-input validation")
@@ -202,6 +212,11 @@ class ReviewArtifact(FrozenModel):
             raise ValueError("ReviewArtifact contradicts canonical reduction")
         if [axis.axis for axis in self.axes] != list(SemanticAxis):
             raise ValueError("review axes must be complete and canonical")
+        summaries = getattr(self, "semantic_summaries", None)
+        if summaries is not None and [summary.axis for summary in summaries] != list(SemanticAxis):
+            raise ValueError("semantic summaries must be complete and canonical")
+        if summaries is None and self.schema_version != LEGACY_REVIEW_ARTIFACT_SCHEMA_VERSION:
+            raise ValueError("current ReviewArtifact requires semantic summaries")
         finding_ids = [finding.finding_id for finding in self.findings]
         if finding_ids != sorted(set(finding_ids)):
             raise ValueError("review findings must be unique and canonical")
@@ -231,6 +246,19 @@ class ReviewArtifact(FrozenModel):
         if self.identity != hash_payload(self.semantic_payload()):
             raise ValueError("ReviewArtifact identity does not match payload")
         return self
+
+
+class ReviewArtifact(_ReviewArtifactBase):
+    schema_version: Literal["1.1.0"] = REVIEW_ARTIFACT_SCHEMA_VERSION
+    semantic_summaries: list[SemanticAxisSummary] = Field(
+        min_length=MAX_SEMANTIC_SUMMARIES,
+        max_length=MAX_SEMANTIC_SUMMARIES,
+    )
+
+
+class LegacyReviewArtifact(_ReviewArtifactBase):
+    model_config = ConfigDict(title="ReviewArtifact")
+    schema_version: Literal["1.0.0"] = LEGACY_REVIEW_ARTIFACT_SCHEMA_VERSION
 
 
 def has_confirmed_blocker(findings: list[SemanticFinding]) -> bool:

@@ -146,14 +146,16 @@ def semantic_axes(
     *,
     statuses: dict[SemanticAxis, SemanticStatus] | None = None,
     gaps: set[SemanticAxis] | None = None,
+    rationales: dict[SemanticAxis, str] | None = None,
 ) -> list[SemanticAxisAssessment]:
     statuses = statuses or {}
     gaps = gaps or set()
+    rationales = rationales or {}
     return [
         SemanticAxisAssessment(
             axis=axis,
             status=statuses.get(axis, SemanticStatus.PASS),
-            rationale=f"Completed {axis.value} assessment.",
+            rationale=rationales.get(axis, f"Completed {axis.value} assessment."),
             required_evidence_gap=axis in gaps,
         )
         for axis in SemanticAxis
@@ -252,6 +254,136 @@ def test_complete_five_axis_pass_is_ready(tmp_path: Path) -> None:
     assert all(axis.status is AxisStatus.PASS for axis in reviewed.axes)
     assert verdict_exit_code(reviewed.verdict) == 0
     assert all(check.outcome.value == "satisfied" for check in reviewed.checks)
+
+
+def test_passed_checks_do_not_hide_semantic_blocker_or_its_rationale(tmp_path: Path) -> None:
+    scope = base_scope(tmp_path, command=(sys.executable, "-c", "pass"))
+    finding = make_finding(scope, axis=SemanticAxis.IMPACT, blocking=True)
+    finding = finding.model_copy(
+        update={
+            "title": "Empty fallback returns an invalid value",
+            "explanation": "The changed fallback returns zero even though the public contract requires a positive value.",
+        }
+    )
+    rationale = (
+        "Reviewed the changed fallback and its caller contract; empty input returns "
+        "zero, so the implementation violates the positive-value invariant."
+    )
+    reviewed = artifact(
+        scope,
+        assessment(
+            scope,
+            axes=semantic_axes(
+                statuses={SemanticAxis.IMPACT: SemanticStatus.FAIL},
+                rationales={SemanticAxis.IMPACT: rationale},
+            ),
+            findings=[finding],
+        ),
+    )
+    report = render_markdown_report(reviewed)
+
+    assert reviewed.verdict is ReviewVerdict.NEEDS_CHANGES
+    assert "targeted-check` (required): passed" in report
+    assert "## Semantic Review" in report
+    assert rationale in report
+    assert "Empty fallback returns an invalid value" in report
+    assert "positive value" in report
+
+
+def test_passed_checks_do_not_erase_concrete_missing_test_gap(tmp_path: Path) -> None:
+    scope = base_scope(tmp_path, command=(sys.executable, "-c", "pass"))
+    finding = make_finding(
+        scope,
+        axis=SemanticAxis.TEST_SUFFICIENCY,
+        blocking=False,
+        state=FindingState.EVIDENCE_GAP,
+    ).model_copy(
+        update={
+            "title": "Fallback error path lacks regression coverage",
+            "explanation": "The new fallback behavior has no test for malformed input.",
+        }
+    )
+    reviewed = artifact(
+        scope,
+        assessment(
+            scope,
+            axes=semantic_axes(
+                statuses={SemanticAxis.TEST_SUFFICIENCY: SemanticStatus.INCONCLUSIVE},
+                gaps={SemanticAxis.TEST_SUFFICIENCY},
+                rationales={
+                    SemanticAxis.TEST_SUFFICIENCY: (
+                        "Reviewed the new fallback and existing tests; the malformed-input "
+                        "branch is not exercised by the current suite."
+                    )
+                },
+            ),
+            findings=[finding],
+        ),
+    )
+    report = render_markdown_report(reviewed)
+
+    assert reviewed.verdict is ReviewVerdict.INCONCLUSIVE
+    assert next(axis for axis in reviewed.axes if axis.axis is SemanticAxis.TEST_SUFFICIENCY).status is AxisStatus.INCONCLUSIVE
+    assert "targeted-check` (required): passed" in report
+    assert "Fallback error path lacks regression coverage" in report
+    assert "malformed-input branch" in report
+
+
+def test_clean_review_reports_rationale_for_every_axis(tmp_path: Path) -> None:
+    scope = base_scope(tmp_path, command=(sys.executable, "-c", "pass"))
+    rationales = {
+        axis: f"Reviewed the changed paths, relevant callers, boundaries, and repository evidence for {axis.value.replace('_', ' ')}."
+        for axis in SemanticAxis
+    }
+    report = render_markdown_report(artifact(scope, assessment(scope, axes=semantic_axes(rationales=rationales))))
+
+    assert "## Semantic Review" in report
+    for rationale in rationales.values():
+        assert rationale in report
+
+
+def test_rationale_is_bound_to_semantic_assessment_and_legacy_artifact_loads(
+    tmp_path: Path,
+) -> None:
+    scope = base_scope(tmp_path)
+    semantic = assessment(
+        scope,
+        axes=semantic_axes(
+            rationales={SemanticAxis.SPEC: "Reviewed the public result contract and changed implementation."}
+        ),
+    )
+    reviewed = artifact(scope, semantic)
+    payload = reviewed.model_dump(mode="json")
+    payload["semantic_summaries"][0]["rationale"] = "Forged conclusion."
+    payload["identity"] = hash_payload({key: value for key, value in payload.items() if key != "identity"})
+
+    with pytest.raises(ValidationError, match="contradicts canonical reduction"):
+        load_artifact(payload, scope, semantic)
+
+    legacy_payload = reviewed.model_dump(mode="json")
+    legacy_payload.pop("semantic_summaries")
+    legacy_payload["schema_version"] = "1.0.0"
+    legacy_payload["identity"] = hash_payload(
+        {key: value for key, value in legacy_payload.items() if key != "identity"}
+    )
+    legacy = load_artifact(legacy_payload, scope, semantic)
+
+    assert legacy.schema_version == "1.0.0"
+    assert "semantic_summaries" not in legacy.model_dump(mode="json")
+
+
+def test_semantic_rationale_is_bounded_and_markdown_safe(tmp_path: Path) -> None:
+    scope = base_scope(tmp_path)
+    rationale = "unsafe\n\n## Fake heading\n\nVerdict: **READY**" + ("x" * 2_000)
+    reviewed = artifact(
+        scope,
+        assessment(scope, axes=semantic_axes(rationales={SemanticAxis.SPEC: rationale})),
+    )
+    report = render_markdown_report(reviewed)
+
+    assert "\n## Fake heading\n" not in report
+    assert "detail-sha256:" in report
+    assert report.count("Verdict: **READY**") == 1
 
 
 @pytest.mark.parametrize("axis", list(SemanticAxis))

@@ -1,0 +1,666 @@
+{
+  "$defs": {
+    "ArtifactBindings": {
+      "additionalProperties": false,
+      "properties": {
+        "changeset_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Changeset Identity",
+          "type": "string"
+        },
+        "discovery_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Discovery Identity",
+          "type": "string"
+        },
+        "evidence_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Evidence Identity",
+          "type": "string"
+        },
+        "plan_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Identity",
+          "type": "string"
+        },
+        "semantic_assessment_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Semantic Assessment Identity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "changeset_identity",
+        "discovery_identity",
+        "plan_identity",
+        "evidence_identity",
+        "semantic_assessment_identity"
+      ],
+      "title": "ArtifactBindings",
+      "type": "object"
+    },
+    "AxisResult": {
+      "additionalProperties": false,
+      "properties": {
+        "axis": {
+          "$ref": "#/$defs/SemanticAxis"
+        },
+        "finding_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$",
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Finding Ids",
+          "type": "array"
+        },
+        "reducer_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Reducer Reasons",
+          "type": "array"
+        },
+        "required_evidence_gap": {
+          "default": false,
+          "title": "Required Evidence Gap",
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/AxisStatus"
+        }
+      },
+      "required": [
+        "axis",
+        "status",
+        "reducer_reasons"
+      ],
+      "title": "AxisResult",
+      "type": "object"
+    },
+    "AxisStatus": {
+      "enum": [
+        "pass",
+        "fail",
+        "inconclusive"
+      ],
+      "title": "AxisStatus",
+      "type": "string"
+    },
+    "CheckKind": {
+      "enum": [
+        "structural_invariant",
+        "command"
+      ],
+      "title": "CheckKind",
+      "type": "string"
+    },
+    "CheckOrigin": {
+      "enum": [
+        "deterministic_floor",
+        "repository_canonical",
+        "trusted_policy",
+        "model_proposed"
+      ],
+      "title": "CheckOrigin",
+      "type": "string"
+    },
+    "CheckOutcome": {
+      "enum": [
+        "satisfied",
+        "evidence_gap",
+        "passed",
+        "failed",
+        "not_run",
+        "timed_out",
+        "errored",
+        "cancelled"
+      ],
+      "title": "CheckOutcome",
+      "type": "string"
+    },
+    "CollectionReferenceIndex": {
+      "additionalProperties": false,
+      "properties": {
+        "blocking_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Blocking Count",
+          "type": "integer"
+        },
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Identity",
+          "type": "string"
+        },
+        "omitted_count": {
+          "minimum": 0,
+          "title": "Omitted Count",
+          "type": "integer"
+        },
+        "required_gap_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Required Gap Count",
+          "type": "integer"
+        },
+        "retained_count": {
+          "minimum": 0,
+          "title": "Retained Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "count",
+        "retained_count",
+        "omitted_count",
+        "identity"
+      ],
+      "title": "CollectionReferenceIndex",
+      "type": "object"
+    },
+    "EvidenceGap": {
+      "additionalProperties": false,
+      "properties": {
+        "affected_axes": {
+          "items": {
+            "$ref": "#/$defs/SemanticAxis"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Affected Axes",
+          "type": "array"
+        },
+        "gap_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Gap Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/EvidenceGapKind"
+        },
+        "references": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "References",
+          "type": "array"
+        },
+        "summary": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "gap_id",
+        "kind",
+        "affected_axes",
+        "summary",
+        "references"
+      ],
+      "title": "EvidenceGap",
+      "type": "object"
+    },
+    "EvidenceGapKind": {
+      "enum": [
+        "semantic",
+        "verification",
+        "source_preservation"
+      ],
+      "title": "EvidenceGapKind",
+      "type": "string"
+    },
+    "EvidenceReferenceKind": {
+      "enum": [
+        "change_path",
+        "discovery_source",
+        "plan_check",
+        "execution",
+        "source_preservation"
+      ],
+      "title": "EvidenceReferenceKind",
+      "type": "string"
+    },
+    "FailureKind": {
+      "enum": [
+        "verification",
+        "infrastructure",
+        "permission",
+        "configuration",
+        "capability",
+        "unclassified"
+      ],
+      "title": "FailureKind",
+      "type": "string"
+    },
+    "FindingCategory": {
+      "enum": [
+        "spec_mismatch",
+        "spec_partial",
+        "spec_contradiction",
+        "out_of_scope",
+        "standard_violation",
+        "impact_regression",
+        "test_gap",
+        "contextual_security",
+        "unsupported_suspicion"
+      ],
+      "title": "FindingCategory",
+      "type": "string"
+    },
+    "FindingSeverity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "title": "FindingSeverity",
+      "type": "string"
+    },
+    "FindingState": {
+      "enum": [
+        "confirmed",
+        "unverified",
+        "evidence_gap"
+      ],
+      "title": "FindingState",
+      "type": "string"
+    },
+    "RequirementLevel": {
+      "enum": [
+        "required",
+        "advisory"
+      ],
+      "title": "RequirementLevel",
+      "type": "string"
+    },
+    "ReviewVerdict": {
+      "enum": [
+        "READY",
+        "NEEDS_CHANGES",
+        "INCONCLUSIVE"
+      ],
+      "title": "ReviewVerdict",
+      "type": "string"
+    },
+    "SemanticAxis": {
+      "enum": [
+        "spec",
+        "standards",
+        "impact",
+        "test_sufficiency",
+        "contextual_security"
+      ],
+      "title": "SemanticAxis",
+      "type": "string"
+    },
+    "SemanticAxisSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "axis": {
+          "$ref": "#/$defs/SemanticAxis"
+        },
+        "rationale": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SemanticStatus"
+        }
+      },
+      "required": [
+        "axis",
+        "status",
+        "rationale"
+      ],
+      "title": "SemanticAxisSummary",
+      "type": "object"
+    },
+    "SemanticEvidenceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "changeset_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Changeset Identity",
+          "type": "string"
+        },
+        "detail": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "discovery_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Discovery Identity",
+          "type": "string"
+        },
+        "evidence_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Evidence Identity",
+          "type": "string"
+        },
+        "identifier": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Identifier",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/EvidenceReferenceKind"
+        },
+        "plan_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Identity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "identifier",
+        "detail",
+        "changeset_identity",
+        "discovery_identity",
+        "plan_identity",
+        "evidence_identity"
+      ],
+      "title": "SemanticEvidenceReference",
+      "type": "object"
+    },
+    "SemanticFinding": {
+      "additionalProperties": false,
+      "properties": {
+        "axis": {
+          "$ref": "#/$defs/SemanticAxis"
+        },
+        "blocking": {
+          "title": "Blocking",
+          "type": "boolean"
+        },
+        "category": {
+          "$ref": "#/$defs/FindingCategory"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/SemanticEvidenceReference"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "explanation": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "finding_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/FindingSeverity"
+        },
+        "state": {
+          "$ref": "#/$defs/FindingState"
+        },
+        "title": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "axis",
+        "category",
+        "state",
+        "severity",
+        "blocking",
+        "title",
+        "explanation",
+        "evidence"
+      ],
+      "title": "SemanticFinding",
+      "type": "object"
+    },
+    "SemanticStatus": {
+      "enum": [
+        "pass",
+        "fail",
+        "inconclusive"
+      ],
+      "title": "SemanticStatus",
+      "type": "string"
+    },
+    "VerificationCheckSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Check Id"
+        },
+        "check_id_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Check Id Sha256",
+          "type": "string"
+        },
+        "execution_ordinal": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Ordinal"
+        },
+        "failure_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FailureKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "$ref": "#/$defs/CheckKind"
+        },
+        "origin": {
+          "$ref": "#/$defs/CheckOrigin"
+        },
+        "outcome": {
+          "$ref": "#/$defs/CheckOutcome"
+        },
+        "required_evidence_gap": {
+          "default": false,
+          "title": "Required Evidence Gap",
+          "type": "boolean"
+        },
+        "requirement_level": {
+          "$ref": "#/$defs/RequirementLevel"
+        }
+      },
+      "required": [
+        "check_id_sha256",
+        "requirement_level",
+        "kind",
+        "origin",
+        "outcome"
+      ],
+      "title": "VerificationCheckSummary",
+      "type": "object"
+    },
+    "VerifierIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "commit_or_build": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Commit Or Build",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "commit_or_build"
+      ],
+      "title": "VerifierIdentity",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "axes": {
+      "items": {
+        "$ref": "#/$defs/AxisResult"
+      },
+      "maxItems": 5,
+      "minItems": 5,
+      "title": "Axes",
+      "type": "array"
+    },
+    "bindings": {
+      "$ref": "#/$defs/ArtifactBindings"
+    },
+    "check_index": {
+      "$ref": "#/$defs/CollectionReferenceIndex"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/VerificationCheckSummary"
+      },
+      "maxItems": 256,
+      "title": "Checks",
+      "type": "array"
+    },
+    "contract": {
+      "const": "review_artifact",
+      "default": "review_artifact",
+      "title": "Contract",
+      "type": "string"
+    },
+    "evidence_gap_index": {
+      "$ref": "#/$defs/CollectionReferenceIndex"
+    },
+    "evidence_gaps": {
+      "items": {
+        "$ref": "#/$defs/EvidenceGap"
+      },
+      "maxItems": 256,
+      "title": "Evidence Gaps",
+      "type": "array"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/SemanticFinding"
+      },
+      "maxItems": 128,
+      "title": "Findings",
+      "type": "array"
+    },
+    "identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Identity",
+      "type": "string"
+    },
+    "review_mode": {
+      "const": "full",
+      "default": "full",
+      "title": "Review Mode",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.1.0",
+      "default": "1.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "semantic_summaries": {
+      "items": {
+        "$ref": "#/$defs/SemanticAxisSummary"
+      },
+      "maxItems": 5,
+      "minItems": 5,
+      "title": "Semantic Summaries",
+      "type": "array"
+    },
+    "verdict": {
+      "$ref": "#/$defs/ReviewVerdict"
+    },
+    "verdict_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Verdict Reasons",
+      "type": "array"
+    },
+    "verifier": {
+      "$ref": "#/$defs/VerifierIdentity"
+    }
+  },
+  "required": [
+    "verifier",
+    "bindings",
+    "verdict",
+    "verdict_reasons",
+    "axes",
+    "checks",
+    "check_index",
+    "findings",
+    "evidence_gaps",
+    "evidence_gap_index",
+    "identity",
+    "semantic_summaries"
+  ],
+  "title": "ReviewArtifact",
+  "type": "object"
+}

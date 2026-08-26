@@ -226,7 +226,34 @@ incomplete materialization, bounded output, accepted risks, and separate
 post-execution source-preservation failures. Security/capability details are
 canonical in `docs/04_security_and_trust.md`.
 
-### 5. Semantic assessment
+### 5. Bounded senior semantic inspection and assessment
+
+Before constructing `SemanticAssessment`, perform one bounded inspection pass over
+the identity-bound ChangeSet and the smallest relevant surrounding context. This
+is semantic judgment owned by the Skill/model; it is not a new AST, dependency,
+scanner, or command-execution framework. For every materially affected axis,
+actively consider only relevant evidence for:
+
+- implementation logic, invariants, branching, ordering, normalization, and
+  fallback behavior;
+- empty/invalid/duplicate/partial input and other boundary or error paths;
+- requirements, repository Standards, schemas, APIs, caller expectations, and
+  backward compatibility;
+- directly affected callers, consumers, adjacent helpers, configuration, and
+  persisted artifacts;
+- test sufficiency: what changed, which tests prove it, whether negative and
+  boundary cases are covered, and whether the implementation could be wrong
+  while selected checks remain green;
+- contextual security only when the change touches a relevant trust, validation,
+  authorization, secret, path, injection, or unsafe-execution boundary.
+
+Record a short `SemanticAxisAssessment.rationale` for every axis that says what
+was reviewed and why the semantic status follows. Use concrete stable evidence
+references for findings. A green check is verification evidence, not a semantic
+PASS; emit a `test_gap` only for a concrete, change-relevant coverage problem,
+not a generic hypothetical. Do not persist private reasoning or a review
+transcript. The final report exposes these bounded rationale summaries and
+stable finding references through the canonical ReviewArtifact only.
 
 Inspect change-relevant identity-bound evidence. Create every finding reference
 with `bind_semantic_reference(...)`, passing current ChangeSet, DiscoveryResult,
@@ -304,7 +331,10 @@ artifact = load_review_artifact(
 Supply the same externally established version/build inputs to both calls;
 never trust serialized metadata or author-repository prose for verifier
 identity. The deterministic reducer owns finding binding, five reduced axes,
-required-gap propagation, and final verdict.
+required-gap propagation, and final verdict. Current `ReviewArtifact` is
+`1.1.0` and carries bounded per-axis semantic summaries copied from the bound
+assessment; loading recomputes them. Frozen `1.0.0` artifacts remain readable
+without those summaries.
 
 ### 8. Render and map exit code
 
