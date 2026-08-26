@@ -144,8 +144,14 @@ def test_numeric_setup_forward_path_covers_representative_narrow_review() -> Non
     assert "3. customize authorization" in verification_section
     assert "approved_gaps" in verification_section
     assert "approval_waivable" in verification_section
-    assert "network off" in verification_section
-    assert "external services off" in verification_section
+    verification_lower = verification_section.casefold()
+    assert "network off" not in verification_lower
+    assert "external services off" not in verification_lower
+    assert "fresh disposable environment" in verification_lower
+    assert "network/external-service isolation is requested when required" in verification_lower
+    assert "enforced only when the host reports that capability" in verification_lower
+    assert "unavailable required isolation remains an explicit capability gap" in verification_lower
+    assert "do not claim network, process, or" in verification_lower
     assert "summarize" in verification_section
     assert "interactive=False" in verification_section
     assert "never call an input function or wait" in verification_section
