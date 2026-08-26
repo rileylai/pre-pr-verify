@@ -226,34 +226,76 @@ incomplete materialization, bounded output, accepted risks, and separate
 post-execution source-preservation failures. Security/capability details are
 canonical in `docs/04_security_and_trust.md`.
 
-### 5. Bounded senior semantic inspection and assessment
+### 5. Mandatory senior semantic inspection gate
 
-Before constructing `SemanticAssessment`, perform one bounded inspection pass over
-the identity-bound ChangeSet and the smallest relevant surrounding context. This
-is semantic judgment owned by the Skill/model; it is not a new AST, dependency,
-scanner, or command-execution framework. For every materially affected axis,
-actively consider only relevant evidence for:
+Every full review, including a bare `$pre-pr-verify` invocation, MUST complete
+this bounded inspection stage after verification and before constructing
+`SemanticAssessment`. No extra prompt or optional review focus is needed to
+activate it. This is Skill/model semantic judgment, not a new AST, dependency,
+scanner, or command-execution framework.
 
-- implementation logic, invariants, branching, ordering, normalization, and
-  fallback behavior;
-- empty/invalid/duplicate/partial input and other boundary or error paths;
-- requirements, repository Standards, schemas, APIs, caller expectations, and
-  backward compatibility;
-- directly affected callers, consumers, adjacent helpers, configuration, and
-  persisted artifacts;
-- test sufficiency: what changed, which tests prove it, whether negative and
-  boundary cases are covered, and whether the implementation could be wrong
-  while selected checks remain green;
-- contextual security only when the change touches a relevant trust, validation,
-  authorization, secret, path, injection, or unsafe-execution boundary.
+The required transition is `verification complete → inspection gate →
+SemanticAssessment construction`; never take the shortcut from verification
+complete directly to assessment construction.
 
+Inspect the identity-bound ChangeSet and the smallest relevant surrounding
+context. For each materially relevant review dimension, actively consider:
+
+- **Implementation logic:** branching, invariants, state transitions, ordering,
+  normalization/canonicalization, aggregation/calculation, fallback behavior,
+  and incorrect assumptions.
+- **Relevant edge/error behavior, when applicable:** empty input, zero/one/many,
+  invalid input, duplicates, partial state, malformed data, missing values,
+  unexpected ordering, and failure/fallback paths.
+- **Contracts and compatibility:** explicit requirements, repository Standards,
+  schemas, APIs, callers, persisted formats, invariants, and backward
+  compatibility.
+- **Impact:** bounded relevant direct callers, consumers, adjacent helpers,
+  configuration/schema, persisted artifacts, and related behavior.
+- **Test Sufficiency:** what behavior changed, which test proves it, which
+  relevant negative/boundary/error case is not exercised, and whether this
+  implementation could still be wrong while every selected test remains green.
+- **Contextual Security, only when materially relevant:** actual trust,
+  validation, authorization, secret, path, injection, or unsafe-execution
+  boundaries. Do not add generic security boilerplate.
+
+#### Inspection completion guard
+
+Do not construct `SemanticAssessment` or call `build_semantic_assessment(...)`
+until all of the following are true:
+
+- the changed implementation was inspected;
+- relevant surrounding context was inspected;
+- each materially relevant review dimension above was considered;
+- all five axis rationales were constructed from that review, including PASS
+  rationales; and
+- concrete findings are recorded when supported by the evidence.
+
+If relevant context is unavailable, preserve an evidence gap and use
+`INCONCLUSIVE`; never silently convert an unperformed inspection or green test
+run into PASS. Verification PASS establishes execution evidence only. It does
+not substitute for semantic correctness or Test Sufficiency, and a concrete
+implementation defect, contract mismatch, or missing-test gap remains
+authoritative when selected tests are green. A `test_gap` must be concrete and
+change-relevant, not hypothetical.
+
+A Spec `INCONCLUSIVE` result caused by the known 34-candidate reconciliation
+limit must not stop useful independent review of Standards, Impact, Test
+Sufficiency, or Contextual Security when those axes have sufficient evidence.
+Continue the gate and assessment for those axes; do not change requirement
+precedence or acknowledgement semantics.
+
+Do not persist private reasoning or a review transcript. Persist only concise
+bounded rationale and evidence-backed findings through the canonical contracts.
+
+### 6. Semantic assessment construction
+
+Only after the inspection completion guard passes, construct the assessment.
 Record a short `SemanticAxisAssessment.rationale` for every axis that says what
 was reviewed and why the semantic status follows. Use concrete stable evidence
-references for findings. A green check is verification evidence, not a semantic
-PASS; emit a `test_gap` only for a concrete, change-relevant coverage problem,
-not a generic hypothetical. Do not persist private reasoning or a review
-transcript. The final report exposes these bounded rationale summaries and
-stable finding references through the canonical ReviewArtifact only.
+references for findings. Provide exactly one assessment for each of Spec,
+Standards, Impact, Test Sufficiency, and Contextual Security. Empty findings
+never default an axis to PASS.
 
 Inspect change-relevant identity-bound evidence. Create every finding reference
 with `bind_semantic_reference(...)`, passing current ChangeSet, DiscoveryResult,
@@ -336,12 +378,17 @@ required-gap propagation, and final verdict. Current `ReviewArtifact` is
 assessment; loading recomputes them. Frozen `1.0.0` artifacts remain readable
 without those summaries.
 
-### 8. Render and map exit code
+### 8. Render and present the canonical report
+
+The user-facing result must include the canonical Markdown produced by `render_markdown_report(artifact)` or a faithful presentation of that output.
+It must include the `Semantic Review` section for all five axes, including rationale for PASS axes, along with confirmed findings, evidence gaps, and verification results. Do not replace the canonical report with an ad-hoc short summary such as only a verdict.
+The full-review Skill must not finish by replacing this rendered report with a
+hand-written summary.
 
 Record `artifact.verdict` and `verdict_exit_code(artifact.verdict)` before
-`render_markdown_report(artifact)`. A reporting failure cannot reinterpret the
-canonical verdict. Source/spec/output detail remains in bound upstream artifacts;
-the report is only a concise projection.
+rendering. A reporting failure cannot reinterpret the canonical verdict.
+Source/spec/output detail remains in bound upstream artifacts; the report is
+only a concise projection.
 
 Exit mapping is READY 0, NEEDS_CHANGES 1, INCONCLUSIVE 2, and
 preflight/`nothing_to_review` 3. Keep the author repository unchanged.

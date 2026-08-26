@@ -184,3 +184,55 @@ def test_forward_planning_with_insufficient_evidence_keeps_empty_additions(
     )
 
     assert [check for check in plan.checks if check.kind.value == "command"] == []
+
+
+def test_bare_invocation_requires_a_mandatory_senior_inspection_gate() -> None:
+    skill = Path("SKILL.md").read_text()
+    runbook = Path("docs/09_v1_skill_runbook.md").read_text()
+    combined = f"{skill}\n{runbook}"
+
+    assert "bare `$pre-pr-verify` invocation" in combined
+    assert "no extra prompt" in combined
+    inspection_start = runbook.index("### 5. Mandatory senior semantic inspection gate")
+    assessment_start = runbook.index("### 6. Semantic assessment construction")
+    inspection = runbook[inspection_start:assessment_start]
+
+    assert inspection_start < assessment_start
+    assert "verification complete → inspection gate" in inspection
+    assert "never take the shortcut" in inspection
+    assert "Do not construct `SemanticAssessment`" in inspection
+    inspection_lower = inspection.casefold()
+    for required_dimension in (
+        "implementation logic",
+        "edge/error behavior",
+        "contracts and compatibility",
+        "Impact",
+        "Test Sufficiency",
+        "Contextual Security",
+    ):
+        assert required_dimension.casefold() in inspection_lower
+    assert "changed implementation was inspected" in inspection
+    assert "relevant surrounding context was inspected" in inspection
+    assert "each materially relevant review dimension" in inspection
+    assert "concrete findings are recorded when supported" in inspection
+
+
+def test_full_review_requires_canonical_semantic_report_in_final_result() -> None:
+    skill = Path("SKILL.md").read_text()
+    runbook = Path("docs/09_v1_skill_runbook.md").read_text()
+    combined = f"{skill}\n{runbook}"
+
+    assert "canonical Markdown produced by `render_markdown_report(artifact)`" in combined
+    assert "must include the `Semantic Review` section" in combined
+    assert "all five axes" in combined
+    assert "including rationale for PASS axes" in combined
+    assert "Do not replace" in combined
+    assert "full-review Skill must not finish" in combined
+
+
+def test_spec_limit_gap_does_not_stop_independent_semantic_axes() -> None:
+    runbook = Path("docs/09_v1_skill_runbook.md").read_text()
+    assert "Spec `INCONCLUSIVE`" in runbook
+    assert "must not stop" in runbook
+    assert "Impact" in runbook
+    assert "Test Sufficiency" in runbook
