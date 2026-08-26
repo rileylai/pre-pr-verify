@@ -222,15 +222,15 @@ def test_full_review_requires_canonical_semantic_report_in_final_result() -> Non
     runbook = Path("docs/09_v1_skill_runbook.md").read_text()
     combined = f"{skill}\n{runbook}"
 
-    assert "the final user-facing response MUST be" in skill
-    assert "`finalized.report` verbatim" in skill
-    assert "no handwritten summary" in skill
-    assert "canonical Markdown produced by `render_markdown_report(artifact)`" in combined
-    assert "must include the `Semantic Review` section" in combined
-    assert "all five axes" in combined
-    assert "including rationale for PASS axes" in combined
-    assert "Do not replace" in combined
-    assert "full-review Skill must not finish" in combined
+    assert "emit_final_report(finalized)" in skill
+    assert "deterministic\n   emission, not model prose" in skill
+    assert "records only" in skill
+    assert "writes `finalized.report` exactly" in combined
+    assert "canonical V1 final-delivery boundary" in combined
+    assert "five semantic axes" in combined
+    assert "must not replace or append" in combined
+    assert "post-execution formatter" in combined
+    assert "outside the author repository" in combined
 
 
 def test_spec_limit_gap_does_not_stop_independent_semantic_axes() -> None:

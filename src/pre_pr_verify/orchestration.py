@@ -8,9 +8,10 @@ second setup state machine.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, TextIO
 
 from pre_pr_verify.discovery_models import DiscoveryResult
 from pre_pr_verify.errors import (
@@ -91,12 +92,13 @@ def record_setup_answer(
     answer: str | int | None,
     *,
     detail: str | None = None,
-) -> SetupStep:
-    """Record one caller-provided setup answer and expose the next step.
+) -> None:
+    """Record one caller-provided setup answer without rendering the next step.
 
     ``answer`` is intentionally required and has no default. The helper does
     not infer, submit, or accept a recommended answer on behalf of the caller.
-    The Skill owns the external interaction boundary described in the runbook.
+    The caller completes prerequisites for the new phase before explicitly
+    calling :func:`prepare_review` again.
     """
 
     if answer is None or (isinstance(answer, str) and not answer.strip()):
@@ -104,7 +106,6 @@ def record_setup_answer(
             "orchestration requires a non-empty externally supplied setup answer"
         )
     setup.submit(answer, detail=detail)
-    return prepare_review(setup)
 
 
 def _capability_identity(capability: ExecutionCapability) -> str:
@@ -467,3 +468,13 @@ def finalize_review(
         exit_code=verdict_exit_code(artifact.verdict),
         report=render_markdown_report(artifact),
     )
+
+
+def emit_final_report(
+    finalized: FinalizedReview,
+    *,
+    stream: TextIO = sys.stdout,
+) -> None:
+    """Emit the already-rendered canonical report without alteration."""
+
+    stream.write(finalized.report)

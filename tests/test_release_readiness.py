@@ -83,6 +83,7 @@ def test_skill_runbook_routes_every_canonical_stage_and_policy_boundary() -> Non
         "capture_resolved_scope",
         "PreReviewSetup",
         "require_ready_to_review",
+        "emit_final_report",
         "installed_core_identity",
     }
 
@@ -154,7 +155,7 @@ def test_numeric_setup_forward_path_covers_representative_narrow_review() -> Non
     assert "enforced only when the host reports that capability" in verification_lower
     assert "unavailable required isolation remains an explicit capability gap" in verification_lower
     assert "do not claim network, process, or" in verification_lower
-    assert "summarize" in verification_section
+    assert "record the external final answer" in verification_section
     assert "interactive=False" in verification_section
     assert "never call an input function or wait" in verification_section
     assert "later patch" not in runbook

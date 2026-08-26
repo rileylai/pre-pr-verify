@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import subprocess
 import sys
 from pathlib import Path
@@ -198,6 +199,16 @@ def test_prepare_and_record_never_supply_a_human_setup_answer(repository: Path) 
         orchestration.record_setup_answer(setup, None)
     assert setup.phase is SetupPhase.SCOPE
     assert setup.scope_selection is None
+
+
+def test_record_setup_answer_only_records_the_transition() -> None:
+    setup = PreReviewSetup(interactive=True)
+
+    result = orchestration.record_setup_answer(setup, 1)
+
+    assert result is None
+    assert setup.phase is SetupPhase.REQUIREMENTS
+    assert setup.scope_selection == "working-changes"
 
 
 def test_incomplete_setup_cannot_authorize_execution(repository: Path) -> None:
@@ -657,3 +668,167 @@ def test_finalization_reloads_semantics_and_returns_canonical_report(
     assert result.report.startswith("# PrePR Verify Report")
     assert "## Semantic Review" in result.report
     assert "### Spec — **PASS**" in result.report
+
+
+def test_canonical_full_review_lifecycle_is_deterministic(
+    repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    initial_status = git(repository, "status", "--short")
+    setup = PreReviewSetup(interactive=True, recommended_scope_number=1)
+
+    scope_step = orchestration.prepare_review(setup)
+    assert scope_step.phase is SetupPhase.SCOPE
+    assert [choice.value for choice in scope_step.choices] == [
+        "working-changes",
+        "current-branch",
+        "since-commit",
+        "custom",
+    ]
+    assert orchestration.record_setup_answer(setup, 1) is None
+    assert setup.phase is SetupPhase.REQUIREMENTS
+
+    options = discover_scope_options(repository)
+    resolved = resolve_scope_selection(
+        options,
+        interactive=True,
+        intent=ScopeIntent.WORKING_CHANGES,
+    )
+    setup.bind_scope(resolved)
+    changeset = capture_resolved_scope(resolved)
+    discovery = discover_review_sources(
+        repository,
+        explicit_specs=(
+            ProvidedRequirement(
+                label="Full lifecycle acceptance criteria",
+                content="The canonical lifecycle must be deterministic end to end.",
+            ),
+        ),
+    )
+    candidates_by_id = {source.source_id: source for source in discovery.sources}
+    setup.set_requirement_candidates(
+        tuple(
+            RequirementCandidate(
+                source_id=source_id,
+                label=candidates_by_id[source_id].label,
+            )
+            for source_id in discovery.requirement_resolution.candidate_source_ids
+        )
+    )
+
+    requirement_step = orchestration.prepare_review(setup)
+    assert requirement_step.phase is SetupPhase.REQUIREMENTS
+    assert requirement_step.candidate_count == 1
+    assert orchestration.record_setup_answer(setup, 1) is None
+    assert setup.phase is SetupPhase.VERIFICATION
+
+    plan = plan_for(changeset, discovery)
+    verification_step = orchestration.prepare_review(setup)
+    assert verification_step.phase is SetupPhase.VERIFICATION
+    assert verification_step.choices[0].value == "authorize"
+    assert orchestration.record_setup_answer(setup, 1) is None
+    assert setup.phase is SetupPhase.FINAL_CONFIRMATION
+
+    execution_capability = capability()
+    authorization = orchestration.authorize_verification_plan(
+        setup,
+        changeset,
+        discovery,
+        plan,
+        execution_capability,
+        timeout_seconds=2,
+        output_limit_bytes=4_096,
+        required_capabilities=(CapabilityName.OUTPUT_LIMITS,),
+    )
+    final_step = orchestration.prepare_review(setup)
+    assert final_step.phase is SetupPhase.FINAL_CONFIRMATION
+    assert final_step.choices[0].value == "yes"
+    assert orchestration.record_setup_answer(setup, "yes") is None
+    setup.require_ready_to_review(current_scope=resolved)
+
+    executor_calls = 0
+    execute = orchestration.execute_verification_plan
+
+    def counted_execute(*args, **kwargs):
+        nonlocal executor_calls
+        executor_calls += 1
+        return execute(*args, **kwargs)
+
+    monkeypatch.setattr(orchestration, "execute_verification_plan", counted_execute)
+    evidence_path = tmp_path / "verifier-run" / "verification-evidence.json"
+    evidence = orchestration.execute_authorized_plan(
+        setup,
+        changeset,
+        discovery,
+        plan,
+        execution_capability,
+        authorization,
+        evidence_path=evidence_path,
+    )
+
+    with pytest.raises(RuntimeError, match="presentation failure"):
+        raise RuntimeError("presentation failure")
+
+    reused_evidence = orchestration.execute_authorized_plan(
+        setup,
+        changeset,
+        discovery,
+        plan,
+        execution_capability,
+        authorization,
+        evidence_path=evidence_path,
+    )
+    assert reused_evidence == evidence
+    assert executor_calls == 1
+    assert len(evidence.executions) == 1
+    assert persisted_path(evidence_path, authorization, changeset).is_file()
+
+    assessment = build_semantic_assessment(
+        changeset,
+        discovery,
+        plan,
+        reused_evidence,
+        axes=tuple(
+            SemanticAxisAssessment(
+                axis=axis,
+                status=SemanticStatus.PASS,
+                rationale=f"Fixture inspection passed for {axis.value}.",
+            )
+            for axis in SemanticAxis
+        ),
+    )
+    finalized = orchestration.finalize_review(
+        changeset,
+        discovery,
+        plan,
+        reused_evidence,
+        assessment,
+        verifier_version="0.1.7",
+        verifier_commit_or_build="full-lifecycle-fixture",
+    )
+    emitted = io.StringIO()
+    orchestration.emit_final_report(finalized, stream=emitted)
+
+    assert emitted.getvalue() == finalized.report
+    for expected in (
+        "# PrePR Verify Report",
+        "Verdict: **READY**",
+        "## Axes",
+        "## Semantic Review",
+        "### Spec — **PASS**",
+        "### Standards — **PASS**",
+        "### Impact — **PASS**",
+        "### Test Sufficiency — **PASS**",
+        "### Contextual Security — **PASS**",
+        "## Verification",
+        "## Blocking findings",
+        "## Non-blocking and unverified findings",
+        "## Required evidence gaps",
+        "## Artifact references",
+        f"- ReviewArtifact: `{finalized.artifact.identity}`",
+        f"- ChangeSet: `{changeset.identity}`",
+        f"- VerificationEvidence: `{reused_evidence.identity}`",
+    ):
+        assert expected in emitted.getvalue()
+    assert capture_resolved_scope(resolved).identity == changeset.identity
+    assert git(repository, "status", "--short") == initial_status
+    assert not (repository / "verification-evidence.json").exists()

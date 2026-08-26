@@ -22,7 +22,7 @@ grant execution, or alter verdicts.
 | Planning         | `pre_pr_verify.verification`                                     | `discover_canonical_checks` → `PlannerCheckInput` / `TrustedPolicyCheckInput` → `build_verification_plan`                     |
 | Execution        | `pre_pr_verify.orchestration`                                    | `authorize_verification_plan` → `execute_authorized_plan` → `load_completed_execution`                                       |
 | Semantic         | `pre_pr_verify.semantic`                                         | `bind_semantic_reference` → `build_semantic_assessment` → `load_semantic_assessment`                                          |
-| Reduction/report | `pre_pr_verify.orchestration`                                   | `finalize_review` → canonical artifact reload → exit mapping → canonical Markdown                                            |
+| Reduction/report | `pre_pr_verify.orchestration`                                   | `finalize_review` → canonical artifact reload → exit mapping → `emit_final_report`                                           |
 
 Supporting semantic types include `EvidenceReferenceKind`, `FindingCategory`, `FindingSeverity`, `FindingState`,
 `RequirementComparison`, `RequirementRelation`, `SemanticAxis`, `SemanticAxisAssessment`, `SemanticFinding`,
@@ -39,9 +39,9 @@ Create one `PreReviewSetup` and drive only its legal phase order:
 SCOPE → REQUIREMENTS → VERIFICATION → FINAL_CONFIRMATION → READY_TO_REVIEW
 ```
 
-Render bounded `current_step()` data and submit numeric/Enter answers through
-`submit(...)`. The coordinator does not prompt, capture, discover, authorize,
-or review. Do not mutate its phase or bypass its guard.
+The coordinator owns bounded `current_step()` rendering data and legal
+`submit(...)` transitions. External callers use the orchestration helpers
+below; the coordinator does not prompt, capture, discover, authorize, or review.
 
 Use the thin orchestration helpers for the interaction handoff:
 
@@ -55,11 +55,13 @@ accept `step.default_number`, or fabricate any other answer in the same turn.
 After a new user turn supplies the choice, record it explicitly:
 
 ```python
-step = record_setup_answer(setup, externally_received_answer, detail=detail)
+record_setup_answer(setup, externally_received_answer, detail=detail)
 ```
 
-`record_setup_answer` has no default answer and returns the next
-`current_step()`. Headless mode must still provide every structured answer.
+`record_setup_answer` has no default answer, records only the legal transition,
+and does not render the next phase. Complete prerequisites for the new phase,
+then call `prepare_review(setup)` explicitly. Headless mode must still provide
+every structured answer.
 This boundary cannot prove human identity cryptographically; it prevents the
 canonical helper from silently selecting for the caller.
 
@@ -96,7 +98,8 @@ Before full capture call `build_scope_preview(resolved)`. This boundary uses bou
 changed-path counts, layer counts, and unavailable content-free line estimate. Large/mixed scope warnings are advisory;
 offer the returned `AdvisoryAction` choices to continue, restart with another explicit scope, or cancel.
 
-After the preview is accepted, submit the scope answer so setup enters `REQUIREMENTS`, then call
+After the preview is accepted, call `record_setup_answer(...)` so setup enters
+`REQUIREMENTS`. Do not prepare that phase yet. Call
 `setup.bind_scope(resolved_scope)` and `capture_resolved_scope(resolved_scope)`. Capture rechecks pinned HEAD and produces
 the canonical ChangeSet. An explicit headless caller may instead call
 `capture_changeset(repository, base_ref, ScopeMode.PENDING)` after supplying the same complete pinned scope. If capture
@@ -119,6 +122,9 @@ setup.set_requirement_candidates(
     recommended_source_ids=recommended_source_ids,
 )
 ```
+
+Only after discovery and this configuration succeed, call
+`prepare_review(setup)` to render `REQUIREMENTS`, present it, and STOP.
 
 The complete winning set and its authority never change. For a bounded small candidate set, setup may present the
 complete set. When the winning set exceeds the small-set presentation bound, overflow presentation shows up to five
@@ -173,7 +179,9 @@ The `review-without-execution` choice does not call
 no-execution/missing-evidence contract. Only `authorize` and
 `customize-authorization` continue to the exact authorization binding below.
 
-After the verification answer advances setup to `FINAL_CONFIRMATION`, and
+In a new user turn, record the verification answer with
+`record_setup_answer(...)`; do not render the next phase automatically. After
+setup advances to `FINAL_CONFIRMATION`, and
 before collecting final confirmation, bind the exact plan and execution
 configuration:
 
@@ -203,7 +211,9 @@ final confirmation again. Never infer or authorize `GIT_REPOSITORY`.
 ### Final confirmation and headless mode
 
 The authorization binding above is not execution: final confirmation remains a
-separate externally supplied setup answer. Then summarize `Scope`,
+separate externally supplied setup answer. After binding, call
+`prepare_review(setup)`, present the final choices, and STOP. In the next user
+turn record the external final answer with `record_setup_answer(...)`. Summarize `Scope`,
 `Requirements`, and `Verification policy`; require explicit `yes`. Blank is
 not confirmation. A representative narrow path is `1`, `1`, `1`, `yes`, with
 authorization bound between the third answer and `yes`. Then call:
@@ -289,6 +299,12 @@ evidence = execute_authorized_plan(
     redaction_values=explicit_secret_values,
 )
 ```
+
+Do not add a post-execution formatter that reads arbitrary result fields.
+Canonical `VerificationEvidence` flows directly to the mandatory semantic
+inspection gate. A simple non-canonical progress message such as
+`Verification completed; proceeding to semantic inspection.` is sufficient;
+detailed results belong to the final canonical report.
 
 Do not infer optional requirements from the complete `CapabilityName` enum.
 Pass only caller-supplied literal secrets; V1 does not infer secret formats.
@@ -445,7 +461,7 @@ finalized = finalize_review(
 )
 artifact = finalized.artifact
 exit_code = finalized.exit_code
-report = finalized.report
+emit_final_report(finalized)
 ```
 
 The helper uses the same externally established version/build inputs for both
@@ -457,12 +473,13 @@ Current `ReviewArtifact` is
 assessment; loading recomputes them. Frozen `1.0.0` artifacts remain readable
 without those summaries.
 
-### 8. Present the canonical report
+### 8. Emit the canonical report
 
-The user-facing result must present `finalized.report`, the canonical Markdown produced by `render_markdown_report(artifact)`.
-It must include the `Semantic Review` section for all five axes, including rationale for PASS axes, along with confirmed findings, evidence gaps, and verification results. Do not replace the canonical report with an ad-hoc short summary such as only a verdict.
-The full-review Skill must not finish by replacing this rendered report with a
-hand-written summary.
+`emit_final_report(finalized)` writes `finalized.report` exactly and is the
+canonical V1 final-delivery boundary. It does not rebuild the report or inspect
+artifact fields to construct another summary. Once emission succeeds, END the
+review; the Skill/model must not replace or append to it with handwritten
+verdict prose.
 
 Record `artifact.verdict` and `finalized.exit_code` before presenting the
 report. A debug, semantic-construction, or reporting failure cannot authorize
@@ -480,6 +497,8 @@ preflight/`nothing_to_review` 3. Keep the author repository unchanged.
 
 From a Skill checkout use locked dependencies and launch the driver with
 `uv run python /path/to/driver.py`; an installed package may use its own Python.
+Any temporary driver or glue file must live in a verifier-owned/system
+temporary directory outside the author repository.
 Do not use the author repository's Python environment. Unless a trusted caller
 sets tighter values, command defaults are 300 seconds and 65,536 output bytes.
 Use empty trusted-policy, planner, redaction, finding, comparison, or gap
