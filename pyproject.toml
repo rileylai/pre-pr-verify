@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "pre-pr-verify"
-version = "0.1.6"
+version = "0.1.7"
 description = "Independent, evidence-based pre-PR verification for AI-assisted development"
 readme = "README.md"
 requires-python = ">=3.11"

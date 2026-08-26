@@ -26,7 +26,7 @@ propagate into the axes and final verdict. The final verdict is `READY`,
 - **V3:** authorized event trigger and deterministic inline mapping. MCP remains an integration interface, not the trigger.
 
 V1 is the implemented local product. The current release candidate is
-`v0.1.6`; V2/V3 remain unimplemented. The repository's release-readiness checks
+`v0.1.7`; V2/V3 remain unimplemented. The repository's release-readiness checks
 cover the complete local workflow, installability, Skill instructions,
 acceptance scenarios, and self-hosting evidence.
 
@@ -73,11 +73,14 @@ authorization, review without execution, customization, or cancellation, and
 ends with one final confirmation. Repository requirements remain evidence, and
 repository commands never grant execution authority.
 
-When discovery finds many same-precedence winning requirement candidates,
-human-attached setup may surface up to five likely relevant sources using
-bounded deterministic relevance. This is presentation-only: the complete
-canonical candidate set and authority remain unchanged, and acknowledging a
-source is inspection/context only, not authoritative selection.
+When discovery finds same-precedence winning requirement candidates, bounded
+small sets may be presented completely. If the winning set exceeds the
+small-set bound, human-attached setup presents up to five candidates: actual
+relevance recommendations first, followed by canonical-order fallbacks. Only
+validated `recommended_source_ids` receive Recommended markers. This is
+presentation-only: the complete canonical candidate set and authority remain
+unchanged, and acknowledging a source is inspection/context only, not
+authoritative selection.
 
 The root `SKILL.md` is the full-review entrypoint. It orchestrates the canonical
 Python builders/loaders for ChangeSet, discovery, planning/execution,
@@ -103,7 +106,7 @@ To validate the built core independently of the source checkout:
 ```sh
 uv venv /tmp/pre-pr-verify-install
 uv pip install --python /tmp/pre-pr-verify-install/bin/python \
-  dist/pre_pr_verify-0.1.6-py3-none-any.whl
+  dist/pre_pr_verify-0.1.7-py3-none-any.whl
 /tmp/pre-pr-verify-install/bin/python -c \
   "import pre_pr_verify; print(pre_pr_verify.__version__)"
 ```

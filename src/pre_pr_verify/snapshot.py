@@ -257,7 +257,7 @@ def _head_tree(
             if kind is FileKind.GITLINK:
                 raise _MaterializationGap(
                     FailureKind.CAPABILITY,
-                    "Gitlink entries are not materializable in v0.1.6",
+                    "Gitlink entries are not materializable in v0.1.7",
                     object_format,
                 )
             if object_type != "blob":
@@ -327,7 +327,7 @@ def _state_payload(
     if state.kind is FileKind.GITLINK:
         raise _MaterializationGap(
             FailureKind.CAPABILITY,
-            "Gitlink entries are not materializable in v0.1.6",
+            "Gitlink entries are not materializable in v0.1.7",
             object_format,
         )
     if state.mode not in {"100644", "100755", "120000"}:

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.7 - 2026-08-26
+
+- Improve large same-precedence requirement setup by filling overflow
+  presentation to up to five visible candidates, with real relevance
+  recommendations first and canonical-order fallbacks afterward.
+- Derive visible Recommended markers only from validated
+  `recommended_source_ids`, preventing caller-provided candidate state from
+  manufacturing a recommendation marker.
+- Simplify V1 agent/runbook guidance and clarify the three-concern versus
+  five-axis model without changing runtime or artifact contracts.
+- Clarify that fresh disposable execution does not imply host network
+  isolation; optional isolation is reported and enforced only when the host
+  actually provides the required capability.
+- Keep local history material out of Git via the `.history` ignore rule.
+
 ## 0.1.6 - 2026-08-25
 
 - Wire bounded model-proposed targeted checks into interactive planning and
