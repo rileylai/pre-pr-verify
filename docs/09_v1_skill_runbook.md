@@ -18,11 +18,11 @@ grant execution, or alter verdicts.
 | ---------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | Scope            | `pre_pr_verify.scope_intent`                                     | `discover_scope_options` → `resolve_scope_selection` → `build_scope_preview` → `capture_resolved_scope`                       |
 | Discovery        | `pre_pr_verify.discovery`; `pre_pr_verify.requirement_relevance` | `discover_review_sources` → `recommend_requirement_source_ids`                                                                |
-| Setup            | `pre_pr_verify.pre_review_setup`                                 | `PreReviewSetup` → `set_requirement_candidates` → `require_ready_to_review`                                                   |
+| Setup            | `pre_pr_verify.pre_review_setup`; `pre_pr_verify.orchestration`  | `PreReviewSetup` → `prepare_review` → `record_setup_answer` → `authorize_verification_plan` → `require_ready_to_review`     |
 | Planning         | `pre_pr_verify.verification`                                     | `discover_canonical_checks` → `PlannerCheckInput` / `TrustedPolicyCheckInput` → `build_verification_plan`                     |
-| Execution        | `pre_pr_verify.verification_models`; `pre_pr_verify.executor`    | `ExecutionCapability` → `execute_verification_plan`                                                                           |
+| Execution        | `pre_pr_verify.orchestration`                                    | `authorize_verification_plan` → `execute_authorized_plan` → `load_completed_execution`                                       |
 | Semantic         | `pre_pr_verify.semantic`                                         | `bind_semantic_reference` → `build_semantic_assessment` → `load_semantic_assessment`                                          |
-| Reduction/report | `pre_pr_verify.build_identity`; `pre_pr_verify.review`           | `installed_core_identity` → `build_review_artifact` → `load_review_artifact` → `render_markdown_report` → `verdict_exit_code` |
+| Reduction/report | `pre_pr_verify.orchestration`                                   | `finalize_review` → canonical artifact reload → exit mapping → canonical Markdown                                            |
 
 Supporting semantic types include `EvidenceReferenceKind`, `FindingCategory`, `FindingSeverity`, `FindingState`,
 `RequirementComparison`, `RequirementRelation`, `SemanticAxis`, `SemanticAxisAssessment`, `SemanticFinding`,
@@ -42,6 +42,31 @@ SCOPE → REQUIREMENTS → VERIFICATION → FINAL_CONFIRMATION → READY_TO_REVI
 Render bounded `current_step()` data and submit numeric/Enter answers through
 `submit(...)`. The coordinator does not prompt, capture, discover, authorize,
 or review. Do not mutate its phase or bypass its guard.
+
+Use the thin orchestration helpers for the interaction handoff:
+
+```python
+step = prepare_review(setup)
+```
+
+Render `step.choices`. When a human-attached choice is required, present the
+choices and STOP the current execution flow. Do not call `setup.submit(1)`,
+accept `step.default_number`, or fabricate any other answer in the same turn.
+After a new user turn supplies the choice, record it explicitly:
+
+```python
+step = record_setup_answer(setup, externally_received_answer, detail=detail)
+```
+
+`record_setup_answer` has no default answer and returns the next
+`current_step()`. Headless mode must still provide every structured answer.
+This boundary cannot prove human identity cryptographically; it prevents the
+canonical helper from silently selecting for the caller.
+
+The orchestration execution helper delegates command work to the existing
+`execute_verification_plan`. Finalization delegates deterministic reduction to
+`build_review_artifact`, `load_review_artifact`, `render_markdown_report`, and
+`verdict_exit_code`; it does not replace those canonical owners.
 
 ### Scope
 
@@ -141,11 +166,47 @@ policy first put in `approval_waivable` and the human explicitly approved. Appro
 waive authority, source preservation, path, secret, shell, or verdict invariants. Review without execution preserves
 NOT_RUN/missing evidence and the existing `INCONCLUSIVE` path. Commands always use fresh disposable environments. Network/external-service isolation is requested when required and enforced only when the host reports that capability; unavailable required isolation remains an explicit capability gap.
 
+The `review-without-execution` choice does not call
+`authorize_verification_plan(...)` and does not create a
+`VerificationAuthorization` binding. Collect final confirmation normally;
+`READY_TO_REVIEW` then leads to semantic review with the existing
+no-execution/missing-evidence contract. Only `authorize` and
+`customize-authorization` continue to the exact authorization binding below.
+
+After the verification answer advances setup to `FINAL_CONFIRMATION`, and
+before collecting final confirmation, bind the exact plan and execution
+configuration:
+
+```python
+authorization = authorize_verification_plan(
+    setup,
+    changeset,
+    discovery,
+    plan,
+    capability,
+    timeout_seconds=300,
+    output_limit_bytes=65_536,
+    required_capabilities=required_capabilities,
+)
+```
+
+The binding uses the existing `VerificationPlan.identity` plus the exact
+`ExecutionCapability` and execution-policy inputs. A changed argv, cwd,
+required/advisory selection, check set, or environment profile therefore
+produces a new plan identity. A capability or execution-policy change also
+invalidates the prior binding. `authorize_verification_plan` and
+`execute_authorized_plan` raise `ReauthorizationRequired` for such a change;
+the helper reopens the existing setup at `VERIFICATION`. Present the revised
+plan, STOP for a new user turn, record the new verification answer, and require
+final confirmation again. Never infer or authorize `GIT_REPOSITORY`.
+
 ### Final confirmation and headless mode
 
-Then summarize `Scope`, `Requirements`, and `Verification policy`; require explicit
-`yes`. Blank is not confirmation. A representative narrow path is `1`, `1`,
-`1`, `yes`. Then call:
+The authorization binding above is not execution: final confirmation remains a
+separate externally supplied setup answer. Then summarize `Scope`,
+`Requirements`, and `Verification policy`; require explicit `yes`. Blank is
+not confirmation. A representative narrow path is `1`, `1`, `1`, `yes`, with
+authorization bound between the third answer and `yes`. Then call:
 
 ```python
 setup.require_ready_to_review(current_scope=resolved_scope)
@@ -153,7 +214,8 @@ setup.require_ready_to_review(current_scope=resolved_scope)
 
 This must precede semantic review and fails closed on cancellation, incomplete phase, stale repository state, or stale
 scope. With `interactive=False`, never call an input function or wait. Require structured scope/boundary, requirement
-decision, authorization/capability, and final confirmation; never invent a branch, requirement, approval, profile, or permission.
+decision, and final confirmation; for execution choices, also require explicit authorization/capability. Never invent a
+branch, requirement, approval, profile, or permission.
 
 ## Canonical review sequence
 
@@ -206,7 +268,8 @@ policy. For an ordinary local command:
 
 ```python
 required_capabilities = (CapabilityName.OUTPUT_LIMITS,)
-evidence = execute_verification_plan(
+authorization = authorize_verification_plan(
+    setup,
     changeset,
     discovery,
     plan,
@@ -214,12 +277,30 @@ evidence = execute_verification_plan(
     timeout_seconds=300,
     output_limit_bytes=65_536,
     required_capabilities=required_capabilities,
+)
+evidence = execute_authorized_plan(
+    setup,
+    changeset,
+    discovery,
+    plan,
+    capability,
+    authorization,
+    evidence_path=review_run_dir / "verification-evidence.json",
     redaction_values=explicit_secret_values,
 )
 ```
 
 Do not infer optional requirements from the complete `CapabilityName` enum.
 Pass only caller-supplied literal secrets; V1 does not infer secret formats.
+The evidence path is scoped to a temporary review run outside the author
+repository. The persisted filename is derived from the exact
+`VerificationAuthorization.binding_identity` (plan, capability, and
+execution-policy identity), so distinct authorizations never collide even
+when the plan is unchanged. On a later call, `execute_authorized_plan` first
+calls canonical `load_completed_execution` and reuses only evidence matching
+the ChangeSet, DiscoveryResult, exact plan, and current verification
+contract/profile bindings. Invalid or stale evidence is an error; do not trust
+it and do not silently execute a replacement command.
 Every command runs in its own fresh disposable environment. Preserve actual
 host capability reporting, environment-profile identity, NOT_RUN/failure kinds,
 incomplete materialization, bounded output, accepted risks, and separate
@@ -343,13 +424,17 @@ exists, preserve its `SemanticLimitGap`; affected axes stay `INCONCLUSIVE` with
 account for incomplete winning-candidate comparison coverage. This is review
 evidence, never preflight/code 3.
 
-### 7. Build and reload ReviewArtifact
+### 7. Deterministic finalization and canonical report
 
-Obtain verifier provenance independently from the installed core:
+After the semantic assessment has passed the inspection gate and has been
+loaded through `load_semantic_assessment`, call the thin finalization helper.
+It reloads the evidence and semantic assessment, builds and reloads the
+canonical ReviewArtifact, records the reducer exit code, and returns the
+canonical Markdown report:
 
 ```python
 verifier_build = installed_core_identity()
-artifact = build_review_artifact(
+finalized = finalize_review(
     changeset,
     discovery,
     plan,
@@ -358,35 +443,33 @@ artifact = build_review_artifact(
     verifier_version=__version__,
     verifier_commit_or_build=verifier_build,
 )
-artifact = load_review_artifact(
-    artifact.model_dump_json(),
-    changeset,
-    discovery,
-    plan,
-    evidence,
-    assessment,
-    verifier_version=__version__,
-    verifier_commit_or_build=verifier_build,
-)
+artifact = finalized.artifact
+exit_code = finalized.exit_code
+report = finalized.report
 ```
 
-Supply the same externally established version/build inputs to both calls;
-never trust serialized metadata or author-repository prose for verifier
-identity. The deterministic reducer owns finding binding, five reduced axes,
-required-gap propagation, and final verdict. Current `ReviewArtifact` is
+The helper uses the same externally established version/build inputs for both
+artifact construction and reload; never trust serialized metadata or
+author-repository prose for verifier identity. The deterministic reducer owns
+finding binding, five reduced axes, required-gap propagation, and final verdict.
+Current `ReviewArtifact` is
 `1.1.0` and carries bounded per-axis semantic summaries copied from the bound
 assessment; loading recomputes them. Frozen `1.0.0` artifacts remain readable
 without those summaries.
 
-### 8. Render and present the canonical report
+### 8. Present the canonical report
 
-The user-facing result must include the canonical Markdown produced by `render_markdown_report(artifact)` or a faithful presentation of that output.
+The user-facing result must present `finalized.report`, the canonical Markdown produced by `render_markdown_report(artifact)`.
 It must include the `Semantic Review` section for all five axes, including rationale for PASS axes, along with confirmed findings, evidence gaps, and verification results. Do not replace the canonical report with an ad-hoc short summary such as only a verdict.
 The full-review Skill must not finish by replacing this rendered report with a
 hand-written summary.
 
-Record `artifact.verdict` and `verdict_exit_code(artifact.verdict)` before
-rendering. A reporting failure cannot reinterpret the canonical verdict.
+Record `artifact.verdict` and `finalized.exit_code` before presenting the
+report. A debug, semantic-construction, or reporting failure cannot authorize
+or reinterpret the canonical verdict. If a later step needs to recover after a
+presentation failure, reload the persisted evidence with the same authorized
+plan; never rerun the checks automatically. `EvidenceReuseError` is a
+fail-closed stop, not permission to trust or replace stale evidence.
 Source/spec/output detail remains in bound upstream artifacts; the report is
 only a concise projection.
 

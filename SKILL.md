@@ -20,38 +20,22 @@ secret handling, or verdict rules.
 
 ## V1 flow
 
-Use the deterministic core's canonical builders and loaders in this order:
-Before running a full review, read `docs/09_v1_skill_runbook.md`; it names the
-exact imports, calls, capability/approval mapping, validation reloads, and exit
+Use the deterministic core's canonical builders and loaders in this order. Read
+`docs/09_v1_skill_runbook.md` before a full review for exact calls and exit
 sequence.
 
-1. Resolve and preview an explicit scope from bounded Git metadata. Only after
-   human confirmation, capture the complete pending `ChangeSet`; stop on
-   cancellation, preflight, or no-review.
-2. Discover bounded requirement and Standards evidence. When human-attached
-   setup has many winning candidates, derive only a bounded presentation
-   recommendation from the captured ChangeSet and DiscoveryResult; the full
-   canonical candidate set and its authority remain unchanged.
-3. Inspect bounded impact/test/tooling evidence, add only justified
-   model-proposed targeted checks, then build the complete plan and show it
-   before authorization.
-4. Execute authorized checks only in fresh disposable environments, recording
-   every result, capability gap, and preservation failure truthfully. The
-   default profile is `FILESYSTEM_ONLY`; request `GIT_REPOSITORY` only through
-   the bounded planner requirement channels, and never infer it from command
-   names or source.
-5. Complete the mandatory bounded Senior Semantic Inspection Gate in the
-   runbook after verification and before assessment. A bare
-   `$pre-pr-verify` invocation needs no extra prompt. Inspect the changed
-   implementation, relevant context, contracts, edge/error behavior, tests,
-   impact, and applicable security boundaries.
-6. Construct the semantic assessment only after that gate. Assess Spec,
-   Standards, Impact, Test Sufficiency, and Contextual Security, with one
-   concise rationale for every axis and stable references for findings.
-7. Build and reload the canonical `ReviewArtifact`; its reducer owns axis status
-   and final verdict.
-8. Render and present the canonical Markdown report from that artifact; never
-   replace it with an ad-hoc final summary.
+1. Resolve/preview explicit scope, then capture `ChangeSet` only after human
+   confirmation; stop on cancellation, preflight, or no-review.
+2. Discover bounded requirements/Standards and preserve the complete candidate
+   set; inspect bounded impact/test/tooling evidence and show the full plan.
+3. Execute only authorized checks in fresh disposable environments. The default
+   profile is `FILESYSTEM_ONLY`; never infer `GIT_REPOSITORY` from commands/source.
+4. Complete the mandatory Senior Semantic Inspection Gate after verification and
+   before assessment; a bare `$pre-pr-verify` invocation needs no extra prompt.
+   Inspect implementation, context, contracts, edge/error, tests, impact, and
+   applicable security boundaries.
+5. Construct all five semantic axes only after the gate, then build/reload the
+   canonical artifact and present its canonical Markdown report.
 
 `READY` requires five PASS axes and complete required evidence.
 `NEEDS_CHANGES` requires a confirmed blocking defect. `INCONCLUSIVE` means
@@ -59,24 +43,39 @@ readiness could not be established. A blocker takes precedence over uncertainty,
 but every gap remains visible. Exit codes are respectively 0, 1, and 2;
 preflight/`nothing_to_review` is 3 and has no readiness verdict.
 
-Inspect only relevant context with bounded excerpts and stable artifact
-references. An optional review focus prioritizes inspection only; it never
-narrows readiness or prevents inspection of callers, tests, adjacent code, or
-contracts. V1 has no provider token policy and needs no API key.
+Inspect relevant context with bounded excerpts and stable references. Review
+focus only prioritizes inspection; it never narrows readiness. V1 has no
+provider token policy or API key requirement.
 
 ## Pre-review setup interaction
 
-Instantiate the deterministic core's `PreReviewSetup` coordinator and render
-its bounded `current_step()` choices. Follow the runbook for nested scope,
-requirements/criteria, and `ExecutionCapability` authorization. Repository
-declarations never authorize themselves, and acknowledging one source never
-removes equal-precedence candidates. Submit answers through the coordinator,
-bind scope before capture, summarize Scope/Requirements/Verification, require
-`yes`, then call `require_ready_to_review(current_scope=resolved_scope)` before
-semantic review.
-The guard rejects stale repository/scope state. Cancellation creates no verdict.
-Headless use supplies every structured answer and never prompts, waits, guesses,
-or invents permission.
+Instantiate one `PreReviewSetup` and use
+`pre_pr_verify.orchestration.prepare_review(setup)` to render its current
+choices. When a human-attached answer is required, present the choices and
+STOP. In a later user turn, pass the external answer to
+`record_setup_answer(setup, answer, detail=...)`; it has no default answer.
+Never call `submit(1)`, accept a recommendation, or fabricate a choice in the
+same turn. This is an interaction invariant, not a cryptographic identity
+guarantee. Complete the existing setup phases and bind scope. After the
+verification answer advances setup to `FINAL_CONFIRMATION`, bind authorization
+before accepting final confirmation. Then obtain the external final answer and
+call `require_ready_to_review(current_scope=resolved_scope)`. Headless mode
+supplies all structured inputs and never guesses permission.
+
+For `authorize` or `customize-authorization`, after showing the complete plan
+and receiving the external verification authorization answer, call
+`authorize_verification_plan(...)` while setup is at `FINAL_CONFIRMATION`. It
+binds the exact plan, capability, and execution policy before final
+confirmation. A plan or profile change invalidates authorization: present the
+revised plan, STOP for a new user authorization, and repeat final confirmation.
+For `review-without-execution`, do not call
+`authorize_verification_plan(...)`; no execution binding is required, and the
+final confirmation may proceed to `READY_TO_REVIEW` with the existing missing-
+evidence/no-execution contract. For an authorized plan, call
+`execute_authorized_plan(...)` with one temporary run-scoped evidence path
+outside the author repository; its persisted filename is derived from the
+exact authorization binding and valid evidence is never silently rerun after a
+later reporting/debug failure.
 
 If bounded semantic collection fails after a non-empty ChangeSet exists, keep
 its `SemanticLimitGap` as review evidence (`INCONCLUSIVE`/2 as required), never

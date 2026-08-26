@@ -126,6 +126,7 @@ class PreReviewSetup:
         self.verification_detail: str | None = None
         self._confirmed_scope: ResolvedScope | None = None
         self._confirmed_scope_identity: str | None = None
+        self._verification_authorization_binding: str | None = None
 
     @staticmethod
     def _validate_recommendations(
@@ -149,6 +150,10 @@ class PreReviewSetup:
     @property
     def phase(self) -> SetupPhase:
         return self._phase
+
+    @property
+    def verification_authorization_binding(self) -> str | None:
+        return self._verification_authorization_binding
 
     def _requirement_step(self) -> SetupStep:
         if not self._requirements_configured:
@@ -343,12 +348,66 @@ class PreReviewSetup:
             return
 
         if self.phase is SetupPhase.FINAL_CONFIRMATION:
+            if (
+                self.verification_selection
+                in {"authorize", "customize-authorization"}
+                and self._verification_authorization_binding is None
+            ):
+                raise PreReviewSetupError(
+                    "exact verification authorization binding is required before "
+                    "final confirmation"
+                )
             self._phase = SetupPhase.READY_TO_REVIEW
 
     def cancel(self) -> None:
         if self.phase is SetupPhase.READY_TO_REVIEW:
             raise PreReviewSetupError("ready setup cannot be cancelled retroactively")
         self._phase = SetupPhase.CANCELLED
+
+    def require_verification_reauthorization(self) -> None:
+        """Reopen only the verification and final-confirmation phases.
+
+        The setup coordinator remains the sole owner of phase transitions. A
+        plan/profile mismatch invalidates the prior authorization, but does
+        not choose a replacement answer or silently continue execution.
+        """
+
+        if self.phase is SetupPhase.CANCELLED:
+            raise PreReviewSetupError("pre-review setup was cancelled; no review exists")
+        if self.phase not in {
+            SetupPhase.FINAL_CONFIRMATION,
+            SetupPhase.READY_TO_REVIEW,
+        }:
+            raise PreReviewSetupError(
+                "verification reauthorization requires final confirmation or "
+                f"ready setup; current phase is {self.phase.value}"
+            )
+        self.verification_selection = None
+        self.verification_detail = None
+        self._verification_authorization_binding = None
+        self._phase = SetupPhase.VERIFICATION
+
+    def bind_verification_authorization(self, binding: str) -> None:
+        """Record the exact verification inputs approved by the setup choice."""
+
+        if self.phase is not SetupPhase.FINAL_CONFIRMATION:
+            raise PreReviewSetupError(
+                "verification authorization requires final confirmation"
+            )
+        if self.verification_selection not in {
+            "authorize",
+            "customize-authorization",
+        }:
+            raise PreReviewSetupError(
+                "verification choice does not authorize execution"
+            )
+        if not binding:
+            raise ValueError("verification authorization binding is required")
+        if self._verification_authorization_binding is not None:
+            raise PreReviewSetupError(
+                "verification authorization was already bound"
+            )
+        self._verification_authorization_binding = binding
 
     def bind_scope(self, resolved_scope: ResolvedScope) -> None:
         """Bind the explicitly confirmed scope without recapturing it."""
@@ -376,6 +435,28 @@ class PreReviewSetup:
             raise PreReviewSetupError(
                 f"pre-review setup is not complete; current phase is {self.phase.value}"
             )
+        self._require_confirmed_scope(current_scope)
+
+    def require_verification_authorization(
+        self,
+        current_scope: ResolvedScope | None = None,
+    ) -> None:
+        """Validate the phase and scope before binding execution authorization."""
+
+        if self.phase is SetupPhase.CANCELLED:
+            raise PreReviewSetupError("pre-review setup was cancelled; no review exists")
+        if self.phase is not SetupPhase.FINAL_CONFIRMATION:
+            raise PreReviewSetupError(
+                "pre-review setup is not complete for verification authorization; "
+                "final confirmation is required; "
+                f"current phase is {self.phase.value}"
+            )
+        self._require_confirmed_scope(current_scope)
+
+    def _require_confirmed_scope(
+        self,
+        current_scope: ResolvedScope | None,
+    ) -> None:
         if self._confirmed_scope is None or self._confirmed_scope_identity is None:
             raise PreReviewSetupError(
                 "confirmed scope identity is required before canonical review"

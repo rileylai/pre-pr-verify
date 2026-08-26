@@ -20,3 +20,15 @@ class PreReviewSetupError(PreflightError):
 
 class InternalCaptureError(PrePRVerifyError):
     """The capture contract or tool failed unexpectedly."""
+
+
+class ReauthorizationRequired(PreflightError):
+    """The authorized verification inputs no longer match the current plan."""
+
+
+class EvidenceReuseError(PrePRVerifyError):
+    """Persisted verification evidence cannot be safely reused."""
+
+
+class ExecutionAuthorizationRequired(PreflightError):
+    """Setup did not authorize execution of verification checks."""

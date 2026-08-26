@@ -56,6 +56,7 @@ def test_numeric_setup_advances_one_required_phase_at_a_time() -> None:
     with pytest.raises(PreflightError, match="not complete"):
         setup.require_ready_to_review()
 
+    setup.bind_verification_authorization("a" * 64)
     setup.submit("yes")
     assert setup.phase is SetupPhase.READY_TO_REVIEW
 

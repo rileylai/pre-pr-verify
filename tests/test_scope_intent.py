@@ -236,6 +236,7 @@ def ready_setup(resolved) -> PreReviewSetup:
     setup.bind_scope(resolved)
     setup.submit("1")
     setup.submit("1")
+    setup.bind_verification_authorization("a" * 64)
     setup.submit("yes")
     return setup
 
