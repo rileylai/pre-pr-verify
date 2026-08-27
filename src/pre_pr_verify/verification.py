@@ -463,7 +463,10 @@ def build_execution_request(
     timeout_seconds: float,
     output_limit_bytes: int,
     required_capabilities: Iterable[CapabilityName],
-    nonzero_failure_kind: FailureKind = FailureKind.VERIFICATION,
+    # A generic post-launch nonzero does not prove that the candidate
+    # verification workload ran or that its failure represents a change
+    # failure. Trusted callers may provide an explicit attribution policy.
+    nonzero_failure_kind: FailureKind = FailureKind.UNCLASSIFIED,
     snapshot_validation_failure: FailureKind | None = None,
 ) -> ExecutionRequest:
     if check.kind is not CheckKind.COMMAND or check.argv is None:

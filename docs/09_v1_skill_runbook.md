@@ -47,15 +47,15 @@ PrePR Verify package or environment.
 
 ## Stage / API map
 
-| Stage            | Module                                                           | Canonical API                                                                                                                 |
-| ---------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Scope            | `pre_pr_verify.scope_intent`                                     | `discover_scope_options` → `resolve_scope_selection` → `build_scope_preview` → `capture_resolved_scope`                       |
-| Discovery        | `pre_pr_verify.discovery`; `pre_pr_verify.requirement_relevance` | `discover_review_sources` → `recommend_requirement_source_ids`                                                                |
-| Setup            | `pre_pr_verify.pre_review_setup`; `pre_pr_verify.orchestration`  | `PreReviewSetup` → `prepare_review` → `record_setup_answer` → `authorize_verification_plan` → `require_ready_to_review`     |
-| Planning         | `pre_pr_verify.verification`                                     | `discover_canonical_checks` → `PlannerCheckInput` / `TrustedPolicyCheckInput` → `build_verification_plan`                     |
-| Execution        | `pre_pr_verify.orchestration`                                    | `authorize_verification_plan` → `execute_authorized_plan` → `load_completed_execution`                                       |
-| Semantic         | `pre_pr_verify.semantic`                                         | `bind_semantic_reference` → `build_semantic_assessment` → `load_semantic_assessment`                                          |
-| Reduction/report | `pre_pr_verify.orchestration`                                   | `finalize_review` → canonical artifact reload → exit mapping → `persist_final_report` / `emit_final_report`                  |
+| Stage            | Module                                                           | Canonical API                                                                                                           |
+| ---------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Scope            | `pre_pr_verify.scope_intent`                                     | `discover_scope_options` → `resolve_scope_selection` → `build_scope_preview` → `capture_resolved_scope`                 |
+| Discovery        | `pre_pr_verify.discovery`; `pre_pr_verify.requirement_relevance` | `discover_review_sources` → `recommend_requirement_source_ids`                                                          |
+| Setup            | `pre_pr_verify.pre_review_setup`; `pre_pr_verify.orchestration`  | `PreReviewSetup` → `prepare_review` → `record_setup_answer` → `authorize_verification_plan` → `require_ready_to_review` |
+| Planning         | `pre_pr_verify.verification`                                     | `discover_canonical_checks` → `PlannerCheckInput` / `TrustedPolicyCheckInput` → `build_verification_plan`               |
+| Execution        | `pre_pr_verify.orchestration`                                    | `authorize_verification_plan` → `execute_authorized_plan` → `load_completed_execution`                                  |
+| Semantic         | `pre_pr_verify.semantic`                                         | `bind_semantic_reference` → `build_semantic_assessment` → `load_semantic_assessment`                                    |
+| Reduction/report | `pre_pr_verify.orchestration`                                    | `finalize_review` → canonical artifact reload → exit mapping → `persist_final_report` / `emit_final_report`             |
 
 Supporting semantic types include `EvidenceReferenceKind`, `FindingCategory`, `FindingSeverity`, `FindingState`,
 `RequirementComparison`, `RequirementRelation`, `SemanticAxis`, `SemanticAxisAssessment`, `SemanticFinding`,

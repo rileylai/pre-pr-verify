@@ -135,6 +135,53 @@ def test_ordinary_required_command_runs_with_only_output_limits(
     assert result.required_evidence_gap is False
 
 
+@pytest.mark.parametrize(
+    ("explicit_failure_kind", "expected_failure_kind", "expected_gap"),
+    [
+        (None, FailureKind.UNCLASSIFIED, True),
+        (FailureKind.VERIFICATION, FailureKind.VERIFICATION, False),
+    ],
+    ids=["generic-default", "explicit-verification-override"],
+)
+def test_build_execution_request_controls_post_launch_nonzero_attribution(
+    tmp_path: Path,
+    explicit_failure_kind: FailureKind | None,
+    expected_failure_kind: FailureKind,
+    expected_gap: bool,
+) -> None:
+    repo = repository(tmp_path)
+    changeset = capture_changeset(repo, "main", ScopeMode.PENDING)
+    discovery = discover_review_sources(repo)
+    check = PlannedCheck(
+        check_id="attribution-check",
+        requirement_level=RequirementLevel.REQUIRED,
+        kind=CheckKind.COMMAND,
+        origin=CheckOrigin.MODEL_PROPOSED,
+        selection_reason="Failure-attribution regression fixture.",
+        argv=[sys.executable, "-c", "raise SystemExit(7)"],
+    )
+
+    with disposable_snapshot(changeset, discovery) as snapshot:
+        request_kwargs: dict[str, object] = {
+            "timeout_seconds": 2,
+            "output_limit_bytes": 1024,
+            "required_capabilities": [CapabilityName.OUTPUT_LIMITS],
+        }
+        if explicit_failure_kind is not None:
+            request_kwargs["nonzero_failure_kind"] = explicit_failure_kind
+        execution_request = build_execution_request(
+            check,
+            snapshot.manifest,
+            **request_kwargs,
+        )
+        result = execute_request(execution_request, capability(), snapshot.path)
+
+    assert execution_request.nonzero_failure_kind is expected_failure_kind
+    assert result.status is ExecutionStatus.FAILED
+    assert result.failure_kind is expected_failure_kind
+    assert result.required_evidence_gap is expected_gap
+
+
 @pytest.mark.parametrize("optional_capability", OPTIONAL_CAPABILITIES)
 def test_unrequested_optional_capability_does_not_block_execution(
     tmp_path: Path, optional_capability: CapabilityName

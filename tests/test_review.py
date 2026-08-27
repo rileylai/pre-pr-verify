@@ -600,8 +600,12 @@ def test_missing_requirements_are_not_ready(tmp_path: Path) -> None:
     assert reviewed.verdict is ReviewVerdict.INCONCLUSIVE
 
 
-def test_failed_required_verification_needs_changes(tmp_path: Path) -> None:
-    scope = base_scope(tmp_path, command=(sys.executable, "-c", "raise SystemExit(7)"))
+def test_explicit_required_verification_failure_needs_changes(tmp_path: Path) -> None:
+    scope = base_scope(
+        tmp_path,
+        command=(sys.executable, "-c", "raise SystemExit(7)"),
+        nonzero_failure_kind=FailureKind.VERIFICATION,
+    )
     reviewed = artifact(scope, assessment(scope))
 
     assert reviewed.verdict is ReviewVerdict.NEEDS_CHANGES
@@ -642,6 +646,34 @@ def test_required_failed_unclassified_is_preserved_as_inconclusive_gap(
     assert "targeted-check` (required): failed/unclassified" in report
     assert "Required check at execution 0 did not produce reliable evidence." in report
     assert "verification.0" not in report
+
+
+def test_confirmed_blocker_preserves_required_unclassified_verification_gap(
+    tmp_path: Path,
+) -> None:
+    scope = base_scope(
+        tmp_path,
+        command=(sys.executable, "-c", "raise SystemExit(2)"),
+        nonzero_failure_kind=FailureKind.UNCLASSIFIED,
+    )
+    blocker = make_finding(scope, axis=SemanticAxis.IMPACT, blocking=True)
+    reviewed = artifact(
+        scope,
+        assessment(
+            scope,
+            axes=semantic_axes(statuses={SemanticAxis.IMPACT: SemanticStatus.FAIL}),
+            findings=[blocker],
+        ),
+    )
+    check = next(item for item in reviewed.checks if item.kind.value == "command")
+
+    assert reviewed.verdict is ReviewVerdict.NEEDS_CHANGES
+    assert any(
+        finding.finding_id == blocker.finding_id for finding in reviewed.findings
+    )
+    assert check.failure_kind is FailureKind.UNCLASSIFIED
+    assert check.required_evidence_gap is True
+    assert any(gap.kind.value == "verification" for gap in reviewed.evidence_gaps)
 
 
 def test_source_preservation_failure_is_separate_and_invalidates_all_axes(tmp_path: Path) -> None:

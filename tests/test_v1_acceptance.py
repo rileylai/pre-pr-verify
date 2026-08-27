@@ -18,7 +18,12 @@ from pre_pr_verify.review import (
     render_markdown_report,
     verdict_exit_code,
 )
-from pre_pr_verify.review_models import ReviewArtifact, ReviewVerdict, hash_payload
+from pre_pr_verify.review_models import (
+    AxisStatus,
+    ReviewArtifact,
+    ReviewVerdict,
+    hash_payload,
+)
 from pre_pr_verify.semantic import (
     SemanticLimitExceeded,
     bind_semantic_reference,
@@ -42,6 +47,7 @@ from pre_pr_verify.verification import build_verification_plan, discover_canonic
 from pre_pr_verify.verification_models import (
     CapabilityName,
     ExecutionCapability,
+    FailureKind,
     SourcePreservationFailure,
     build_verification_evidence,
 )
@@ -335,13 +341,19 @@ def test_empty_scope_is_nothing_to_review_without_verdict(tmp_path: Path) -> Non
         )
 
 
-def test_required_verification_failure_needs_changes(tmp_path: Path) -> None:
+def test_required_generic_nonzero_is_inconclusive(tmp_path: Path) -> None:
     scope = deterministic_scope(repository(tmp_path, command_exit=7))
     artifact, report = complete_review(scope)
 
-    assert artifact.verdict is ReviewVerdict.NEEDS_CHANGES
-    assert scope[3].executions[0].result.status.value == "failed"
-    assert "failed/verification" in report
+    result = scope[3].executions[0].result
+    assert artifact.verdict is ReviewVerdict.INCONCLUSIVE
+    assert next(
+        axis for axis in artifact.axes if axis.axis is SemanticAxis.TEST_SUFFICIENCY
+    ).status is AxisStatus.INCONCLUSIVE
+    assert result.status.value == "failed"
+    assert result.failure_kind is FailureKind.UNCLASSIFIED
+    assert result.required_evidence_gap is True
+    assert "failed/unclassified" in report
 
 
 def test_semantic_contradiction_is_inconclusive(tmp_path: Path) -> None:

@@ -236,7 +236,7 @@ def test_direct_git_configuration_escape_is_not_run(
     assert result.required_evidence_gap is True
 
 
-def test_indirect_git_is_not_classified_by_nested_argv_or_stderr(
+def test_indirect_git_nonzero_is_unclassified_without_explicit_attribution(
     tmp_path: Path,
 ) -> None:
     command = [
@@ -255,12 +255,12 @@ def test_indirect_git_is_not_classified_by_nested_argv_or_stderr(
     result = evidence.executions[0].result
 
     assert result.status is ExecutionStatus.FAILED
-    assert result.failure_kind is FailureKind.VERIFICATION
+    assert result.failure_kind is FailureKind.UNCLASSIFIED
     assert result.exit_code == 7
-    assert result.required_evidence_gap is False
+    assert result.required_evidence_gap is True
 
 
-def test_filesystem_only_direct_git_behavior_is_unchanged(tmp_path: Path) -> None:
+def test_filesystem_only_direct_git_nonzero_is_unclassified_gap(tmp_path: Path) -> None:
     repo = repository(
         tmp_path,
         ["git", "status"],
@@ -275,8 +275,8 @@ def test_filesystem_only_direct_git_behavior_is_unchanged(tmp_path: Path) -> Non
     assert evidence.executions[0].snapshot.environment_profile is EnvironmentProfile.FILESYSTEM_ONLY
     assert evidence.executions[0].snapshot.complete is True
     assert result.status is ExecutionStatus.FAILED
-    assert result.failure_kind is FailureKind.VERIFICATION
-    assert result.required_evidence_gap is False
+    assert result.failure_kind is FailureKind.UNCLASSIFIED
+    assert result.required_evidence_gap is True
 
 
 def test_advisory_unsupported_direct_git_is_not_run_without_required_gap(

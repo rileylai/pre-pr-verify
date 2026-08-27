@@ -238,7 +238,7 @@ def test_incomplete_git_materialization_context_is_removed_after_use(
     assert not temporary_path.exists()
 
 
-def test_complete_git_repository_real_nonzero_is_verification_failure(
+def test_complete_git_repository_real_nonzero_is_unclassified_gap(
     tmp_path: Path,
 ) -> None:
     command = [sys.executable, "-c", "raise SystemExit(7)"]
@@ -248,9 +248,9 @@ def test_complete_git_repository_real_nonzero_is_verification_failure(
     evidence = execute(repo, changeset, discovery, plan)
     result = evidence.executions[0].result
     assert result.status is ExecutionStatus.FAILED
-    assert result.failure_kind is FailureKind.VERIFICATION
+    assert result.failure_kind is FailureKind.UNCLASSIFIED
     assert result.exit_code == 7
-    assert result.required_evidence_gap is False
+    assert result.required_evidence_gap is True
 
 
 def test_child_can_mutate_disposable_git_state_without_mutating_source(
