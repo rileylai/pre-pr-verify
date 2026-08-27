@@ -501,9 +501,11 @@ finalized = finalize_review(
 )
 artifact = finalized.artifact
 exit_code = finalized.exit_code
-# An optional recovery copy may be persisted before this required stdout write.
+# Optional subprocess/tool stdout transport; this is not human-session completion.
 emit_final_report(finalized)
-# END REVIEW
+# In a human-attached Codex session, transport finalized.report verbatim as the
+# actual user-visible assistant final response before ending the review.
+# END REVIEW only after that canonical report handoff succeeds.
 ```
 
 The helper uses the same externally established version/build inputs for both
@@ -518,13 +520,24 @@ without those summaries.
 ### 8. Emit the canonical report
 
 `emit_final_report(finalized)` writes `finalized.report` exactly to stdout by
-default and is the required canonical V1 final-delivery boundary. An optional
-recovery copy may be written to a verifier-owned temporary file before this
-write, but `emit_final_report(finalized, stream=file)` plus a printed path is
-not canonical completion. Do not rebuild the report, reopen a recovery file,
-inspect artifact fields to construct another summary, or manually reconstruct
-or summarize it. Once stdout emission succeeds, END REVIEW; the Skill/model
-must not replace or append to it with handwritten verdict prose.
+default and may remain the subprocess/tool stdout transport. It is not the
+human-attached session's completion boundary: stdout success alone is not
+review completion. An optional recovery copy may be written to a
+verifier-owned temporary file before this write, but
+`emit_final_report(finalized, stream=file)` plus a printed path is not
+canonical completion.
+
+After canonical finalization, the Skill/model must transport the exact
+verbatim `finalized.report` into the actual assistant final response shown to
+the user. The user-visible final assistant message itself must contain that
+canonical report beginning with `# PrePR Verify Report`; it must not add a
+wrapper or replace the report with handwritten verdict prose. The model is
+only a transport layer, not a renderer: do not rebuild, reopen, inspect, or
+manually reconstruct the report, and do not summarize, rewrite, shorten, or
+reinterpret it. Do not end with `report emitted above`, `canonical report
+above`, `review complete`, a path-only message, a summary-only message, or an
+equivalent completion message. `END REVIEW` occurs only after this
+user-visible canonical report handoff succeeds.
 
 Record `artifact.verdict` and `finalized.exit_code` before presenting the
 report. A debug, semantic-construction, or reporting failure cannot authorize

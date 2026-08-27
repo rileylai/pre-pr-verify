@@ -217,30 +217,50 @@ def test_bare_invocation_requires_a_mandatory_senior_inspection_gate() -> None:
     assert "concrete findings are recorded when supported" in inspection
 
 
-def test_full_review_requires_canonical_semantic_report_in_final_result() -> None:
+def test_full_review_requires_user_visible_canonical_report_handoff() -> None:
     skill = Path("SKILL.md").read_text()
     runbook = Path("docs/09_v1_skill_runbook.md").read_text()
-    combined = f"{skill}\n{runbook}"
 
-    assert "emit_final_report(finalized)` to stdout" in skill
-    assert "Once stdout emission succeeds, END REVIEW" in skill
-    assert "optional recovery files never\n   replace it" in skill
-    assert "must not reconstruct or summarize" in skill
-    assert "records only" in skill
-    assert "writes `finalized.report` exactly to stdout by" in combined
-    assert "canonical V1 final-delivery boundary" in combined
-    assert "five semantic axes" in combined
-    assert "optional\nrecovery copy" in combined
-    assert "plus a printed path is\nnot canonical completion" in combined
-    assert "reopen a recovery file" in combined
-    assert "END REVIEW" in combined
-    assert "must not replace or append" in combined
-    assert "post-execution formatter" in combined
-    assert "outside the author repository" in combined
+    skill_flow = skill[skill.index("## V1 flow") : skill.index("## Pre-review setup interaction")]
+    finalization = runbook[runbook.index("### 7. Deterministic finalization") : runbook.index("### 8. Emit the canonical report")]
+    delivery = runbook[runbook.index("### 8. Emit the canonical report") :]
+    skill_flow_text = " ".join(skill_flow.split())
+    finalization_text = " ".join(finalization.split())
+    delivery_text = " ".join(delivery.split())
 
-    finalization = runbook[runbook.index("### 7. Deterministic finalization") :]
-    assert finalization.index("finalize_review(") < finalization.index(
+    assert "`finalized.report` is the canonical Markdown report" in skill_flow_text
+    assert "stdout success alone is not review completion" in skill_flow_text
+    assert "`finalized.report` verbatim" in skill_flow_text
+    assert "actual assistant final response shown to the user" in skill_flow_text
+    assert "user, beginning `# PrePR Verify Report`" in skill_flow_text
+
+    assert "writes `finalized.report` exactly to stdout by" in delivery_text
+    assert "stdout success alone is not review completion" in delivery_text
+    assert "actual assistant final response shown to the user" in delivery_text
+    assert "exact verbatim `finalized.report`" in delivery_text
+    assert "transport layer, not a renderer" in delivery_text
+    assert "Do not end with `report emitted above`, `canonical report above`, `review complete`" in delivery_text
+    assert "path-only message" in delivery_text
+    assert "summary-only message" in delivery_text
+    assert "user-visible canonical report handoff succeeds" in delivery_text
+
+    assert "Once stdout emission succeeds, END REVIEW" not in skill_flow_text
+    assert "Once stdout emission succeeds, END REVIEW" not in delivery_text
+
+    assert finalization_text.index("finalize_review(") < finalization_text.index(
         "emit_final_report(finalized)"
+    )
+    assert finalization_text.index("emit_final_report(finalized)") < finalization_text.index(
+        "transport finalized.report verbatim"
+    )
+    assert finalization_text.index("transport finalized.report verbatim") < finalization_text.index(
+        "END REVIEW only after"
+    )
+    assert delivery_text.index("emit_final_report(finalized)") < delivery_text.index(
+        "actual assistant final response shown to"
+    )
+    assert delivery_text.index("actual assistant final response shown to") < delivery_text.index(
+        "`END REVIEW` occurs only after"
     )
 
 

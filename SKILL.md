@@ -20,9 +20,8 @@ secret handling, or verdict rules.
 
 ## V1 flow
 
-Use the deterministic core's canonical builders and loaders in this order. Read
-`docs/09_v1_skill_runbook.md` before a full review for exact calls and exit
-sequence.
+Use canonical builders/loaders in order; read
+`docs/09_v1_skill_runbook.md` for exact calls and exit sequence.
 
 1. Resolve/preview explicit scope, then capture `ChangeSet` only after human
    confirmation; stop on cancellation, preflight, or no-review.
@@ -34,10 +33,12 @@ sequence.
    before assessment; a bare `$pre-pr-verify` invocation needs no extra prompt.
    Inspect implementation, context, contracts, edge/error, tests, impact, and
    applicable security boundaries.
-5. Construct five semantic axes only after the gate, then call
-   `finalize_review(...)` followed by `emit_final_report(finalized)` to stdout.
-   Once stdout emission succeeds, END REVIEW; optional recovery files never
-   replace it, and the model must not reconstruct or summarize the report.
+5. After the gate, call `finalize_review(...)`; `finalized.report` is the
+   canonical Markdown report. `emit_final_report(finalized)` may write stdout,
+   but stdout success alone is not review completion. In human sessions, pass
+   `finalized.report` verbatim to the actual assistant final response shown to
+   the user, beginning `# PrePR Verify Report`; END REVIEW only after this
+   handoff. See runbook §8.
 
 `READY` requires five PASS axes and complete required evidence.
 `NEEDS_CHANGES` requires a confirmed blocking defect. `INCONCLUSIVE` means
@@ -77,10 +78,9 @@ possible launch, use only `load_completed_execution(...)` on target.
 Absent/invalid evidence is `UNKNOWN`: fail closed; no retry. New execution
 requires new explicit authorization telling user prior outcome unknown.
 
-After execution, pass canonical `VerificationEvidence` directly through the
-semantic inspection gate and assessment to finalization. Progress prose may
-state that verification completed, but must not manually format guessed result
-fields or reconstruct detailed evidence.
+After execution, pass canonical `VerificationEvidence` through semantic
+inspection and assessment to finalization. Progress may state completion, but
+must not format guessed results or reconstruct evidence.
 
 If bounded semantic collection fails after a non-empty ChangeSet exists, keep
 its `SemanticLimitGap` as review evidence (`INCONCLUSIVE`/2 as required), never
