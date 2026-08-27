@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -89,6 +91,88 @@ def minimal_repository(tmp_path: Path) -> Path:
     git(repository, "commit", "-m", "base")
     (repository / "module.txt").write_text("pending\n")
     return repository
+
+
+def test_skill_provenance_pins_owned_resources_and_canonical_runtime() -> None:
+    skill = Path("SKILL.md").read_text()
+    runbook = Path("docs/09_v1_skill_runbook.md").read_text()
+    combined = f"{skill}\n{runbook}"
+
+    for owned_path in (
+        "SKILL.md",
+        "docs/02_review_and_verdict_contracts.md",
+        "docs/03_verification_strategy.md",
+        "docs/04_security_and_trust.md",
+        "docs/05_repository_scope_and_changeset.md",
+        "docs/08_development_validation_and_self_hosting.md",
+        "docs/09_v1_skill_runbook.md",
+        "schemas/",
+        "src/pre_pr_verify/",
+        ".venv/",
+    ):
+        assert f"<SKILL_ROOT>/{owned_path}" in combined
+
+    assert "SKILL_ROOT = directory_containing(the_loaded_SKILL.md)" in runbook
+    assert "TARGET_REPOSITORY_ROOT = absolute_path(the_explicit_target_repository)" in runbook
+    assert "SKILL_PYTHON = <SKILL_ROOT>/.venv/bin/python" in runbook
+    assert "sys.executable" in combined
+    assert "pre_pr_verify.__file__" in combined
+    assert "installed_core_identity()" in combined
+    assert "target repository as cwd" in combined
+    assert "`.venv`" in combined
+    assert "`PYTHONPATH`" in combined
+
+    launch = runbook[runbook.index("## Launch defaults") :]
+    launch_text = " ".join(launch.split())
+    assert "<SKILL_ROOT>/.venv/bin/python" in launch
+    assert "target repository's `uv run python` is not a canonical core invocation" in launch_text
+    assert "`uv run python /path/to/driver.py`" not in launch
+    assert "driver outside the target repository" in launch_text
+    assert "process cwd `<SKILL_ROOT>`" in launch_text
+
+
+def test_installed_skill_runtime_is_independent_of_target_cwd(tmp_path: Path) -> None:
+    skill_root = Path(__file__).resolve().parents[1]
+    skill_python = skill_root / ".venv" / "bin" / "python"
+    assert skill_python.is_file()
+
+    target_repository = tmp_path / "target"
+    shadow_package = target_repository / "pre_pr_verify"
+    shadow_package.mkdir(parents=True)
+    (shadow_package / "__init__.py").write_text('__version__ = "target-shadow"\n')
+
+    driver = tmp_path / "driver.py"
+    driver.write_text(
+        "import json\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "import pre_pr_verify\n"
+        "from pre_pr_verify.build_identity import installed_core_identity\n"
+        "print(json.dumps({\n"
+        "    'executable': sys.executable,\n"
+        "    'package': str(Path(pre_pr_verify.__file__).resolve()),\n"
+        "    'version': pre_pr_verify.__version__,\n"
+        "    'identity': installed_core_identity(),\n"
+        "}))\n"
+    )
+
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [str(skill_python), str(driver)],
+        cwd=target_repository,
+        env=environment,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    runtime = json.loads(result.stdout)
+
+    assert Path(runtime["executable"]).resolve() == skill_python.resolve()
+    package_path = Path(runtime["package"])
+    assert skill_root in package_path.parents
+    assert runtime["version"] != "target-shadow"
+    assert runtime["identity"].startswith("core-sha256:")
 
 
 def test_q14_forward_plan_proposes_focused_and_affected_regression_checks(
