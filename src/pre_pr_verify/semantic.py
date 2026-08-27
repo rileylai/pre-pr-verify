@@ -17,6 +17,7 @@ from pre_pr_verify.semantic_models import (
     EvidenceReferenceKind,
     FindingCategory,
     FindingState,
+    LegacySemanticAssessment,
     RequirementComparison,
     RequirementRelation,
     SemanticAssessment,
@@ -249,27 +250,32 @@ def bind_semantic_reference(
     )
 
 
+def _semantic_reference_set(values: Iterable[str | int]) -> SemanticReferenceSet:
+    canonical = sorted(set(values))
+    return SemanticReferenceSet(
+        count=len(canonical),
+        identity=hash_payload({"values": canonical}),
+    )
+
+
 def _reference_index(
     changeset: ChangeSet,
     discovery: DiscoveryResult,
     plan: VerificationPlan,
     evidence: VerificationEvidence,
 ) -> SemanticReferenceIndex:
-    def reference_set(values: Iterable[str | int]) -> SemanticReferenceSet:
-        canonical = sorted(set(values))
-        return SemanticReferenceSet(
-            count=len(canonical),
-            identity=hash_payload({"values": canonical}),
-        )
-
     provisional = SemanticReferenceIndex.model_construct(
-        changed_paths=reference_set(
+        changed_paths=_semantic_reference_set(
             change.effective.path.raw_b64 for change in changeset.changes
         ),
-        discovery_sources=reference_set(source.source_id for source in discovery.sources),
-        plan_checks=reference_set(check.check_id for check in plan.checks),
-        execution_ordinals=reference_set(item.ordinal for item in evidence.executions),
-        preservation_ordinals=reference_set(
+        discovery_sources=_semantic_reference_set(
+            source.source_id for source in discovery.sources
+        ),
+        plan_checks=_semantic_reference_set(check.check_id for check in plan.checks),
+        execution_ordinals=_semantic_reference_set(
+            item.ordinal for item in evidence.executions
+        ),
+        preservation_ordinals=_semantic_reference_set(
             item.ordinal for item in evidence.source_preservation_failures
         ),
         identity="",
@@ -282,7 +288,49 @@ def _reference_index(
     )
 
 
+def canonical_winning_requirement_set(
+    discovery: DiscoveryResult,
+) -> SemanticReferenceSet:
+    return _semantic_reference_set(
+        discovery.requirement_resolution.candidate_source_ids
+    )
+
+
 def _requirement_comparison_limit_gap(
+    comparisons: list[RequirementComparison],
+) -> SemanticLimitGap | None:
+    """Bind an actual concrete-comparison collection overflow to its records."""
+
+    if len(comparisons) != MAX_COMPARISONS:
+        return None
+
+    canonical_comparisons = [
+        comparison.model_dump(mode="json")
+        for comparison in sorted(
+            comparisons,
+            key=lambda value: tuple(value.source_ids),
+        )
+    ]
+    value = {
+        "comparison_requirement": {
+            "representation": "bounded-record-collection",
+            "retained_comparison_identity": hash_payload(
+                {"comparisons": canonical_comparisons}
+            ),
+            "retained_comparison_count": len(canonical_comparisons),
+        },
+    }
+    return _limit_gap(
+        SemanticLimitConcern.SEMANTIC_COLLECTION,
+        "requirement_comparisons",
+        MAX_COMPARISONS,
+        MAX_COMPARISONS + 1,
+        [SemanticAxis.SPEC],
+        value,
+    )
+
+
+def _legacy_requirement_comparison_limit_gap(
     discovery: DiscoveryResult,
     comparisons: list[RequirementComparison],
 ) -> SemanticLimitGap | None:
@@ -340,12 +388,14 @@ def _requirement_comparison_limit_gap(
     )
 
 
-def _validate_requirement_completeness(
+def _validate_legacy_requirement_completeness(
     discovery: DiscoveryResult,
     comparisons: list[RequirementComparison],
     limit_gaps: list[SemanticLimitGap],
 ) -> None:
-    expected_limit_gap = _requirement_comparison_limit_gap(discovery, comparisons)
+    expected_limit_gap = _legacy_requirement_comparison_limit_gap(
+        discovery, comparisons
+    )
     supplied_limit_gaps = [
         gap
         for gap in limit_gaps
@@ -380,6 +430,53 @@ def _validate_requirement_completeness(
         raise ValueError("semantic assessment omits a winning requirement comparison")
     if expected_limit_gap is not None:
         raise ValueError("complete requirement comparisons cannot carry a limit gap")
+
+
+def _validate_requirement_reviewed_set(
+    discovery: DiscoveryResult,
+    reviewed_requirement_sources: SemanticReferenceSet,
+    axes: list[SemanticAxisAssessment],
+) -> None:
+    expected = canonical_winning_requirement_set(discovery)
+    if reviewed_requirement_sources == expected:
+        return
+    spec_axis = next(axis for axis in axes if axis.axis is SemanticAxis.SPEC)
+    if (
+        spec_axis.status is not SemanticStatus.INCONCLUSIVE
+        or not spec_axis.required_evidence_gap
+    ):
+        raise ValueError(
+            "reviewed winning requirement set mismatch requires an inconclusive Spec evidence gap"
+        )
+
+
+def _validate_requirement_completeness(
+    discovery: DiscoveryResult,
+    comparisons: list[RequirementComparison],
+    limit_gaps: list[SemanticLimitGap],
+) -> None:
+    supplied_limit_gaps = [
+        gap
+        for gap in limit_gaps
+        if gap.field == "requirement_comparisons"
+        or gap.field.startswith("requirement_comparisons.")
+    ]
+    if supplied_limit_gaps:
+        expected_limit_gap = _requirement_comparison_limit_gap(comparisons)
+        if supplied_limit_gaps != (
+            [expected_limit_gap] if expected_limit_gap is not None else []
+        ):
+            raise ValueError("requirement comparison limit gap does not match derived capacity")
+
+    winning = sorted(discovery.requirement_resolution.candidate_source_ids)
+    if len(winning) <= 1:
+        if comparisons:
+            raise ValueError("requirement comparisons require multiple winning candidates")
+        return
+    winning_set = set(winning)
+    for comparison in comparisons:
+        if not set(comparison.source_ids) <= winning_set:
+            raise ValueError("requirement comparison must use winning candidates")
 
 
 def _validate_requirement_semantics(
@@ -459,6 +556,7 @@ def build_semantic_assessment(
     evidence: VerificationEvidence,
     *,
     axes: Iterable[SemanticAxisAssessment],
+    reviewed_requirement_sources: SemanticReferenceSet,
     findings: Iterable[SemanticFinding] = (),
     requirement_comparisons: Iterable[RequirementComparison] = (),
     limit_gaps: Iterable[SemanticLimitGap] = (),
@@ -499,7 +597,7 @@ def build_semantic_assessment(
             for value in error.values[:MAX_COMPARISONS]
             if isinstance(value, RequirementComparison)
         ]
-        derived_gap = _requirement_comparison_limit_gap(discovery, retained)
+        derived_gap = _requirement_comparison_limit_gap(retained)
         if derived_gap is None:
             raise
         raise SemanticLimitExceeded(derived_gap, error.values) from error
@@ -514,6 +612,11 @@ def build_semantic_assessment(
     )
 
     index = _reference_index(changeset, discovery, plan, evidence)
+    _validate_requirement_reviewed_set(
+        discovery,
+        reviewed_requirement_sources,
+        axis_values,
+    )
     _validate_requirement_completeness(discovery, comparison_values, gap_values)
 
     provisional = SemanticAssessment.model_construct(
@@ -521,6 +624,7 @@ def build_semantic_assessment(
         discovery_identity=discovery.identity,
         plan_identity=plan.identity,
         evidence_identity=evidence.identity,
+        reviewed_requirement_sources=reviewed_requirement_sources,
         requirement_comparisons=comparison_values,
         limit_gaps=gap_values,
         axes=axis_values,
@@ -546,7 +650,7 @@ def load_semantic_assessment(
     discovery: DiscoveryResult,
     plan: VerificationPlan,
     evidence: VerificationEvidence,
-) -> SemanticAssessment:
+) -> SemanticAssessment | LegacySemanticAssessment:
     """Deserialize only through the same scope/reference checks as producers."""
 
     if changeset.empty:
@@ -564,8 +668,15 @@ def load_semantic_assessment(
         raise ValueError("semantic evidence scope identities do not match")
 
     expected_index = _reference_index(changeset, discovery, plan, evidence)
+    schema_version = payload.get("schema_version")
+    if schema_version == "1.0.0":
+        assessment_type = LegacySemanticAssessment
+    elif schema_version == "1.1.0":
+        assessment_type = SemanticAssessment
+    else:
+        raise ValueError(f"unsupported SemanticAssessment schema version: {schema_version!r}")
     try:
-        assessment = SemanticAssessment.model_validate(
+        assessment = assessment_type.model_validate(
             dict(payload),
             context={
                 "semantic_scope": expected_index,
@@ -651,11 +762,23 @@ def load_semantic_assessment(
                     for reference in references
                 ):
                     raise ValueError("confirmed impact finding lacks behavior evidence")
-    _validate_requirement_completeness(
-        discovery,
-        list(assessment.requirement_comparisons),
-        list(assessment.limit_gaps),
-    )
+    if isinstance(assessment, LegacySemanticAssessment):
+        _validate_legacy_requirement_completeness(
+            discovery,
+            list(assessment.requirement_comparisons),
+            list(assessment.limit_gaps),
+        )
+    else:
+        _validate_requirement_reviewed_set(
+            discovery,
+            assessment.reviewed_requirement_sources,
+            list(assessment.axes),
+        )
+        _validate_requirement_completeness(
+            discovery,
+            list(assessment.requirement_comparisons),
+            list(assessment.limit_gaps),
+        )
     _validate_requirement_semantics(discovery, assessment)
     return assessment
 

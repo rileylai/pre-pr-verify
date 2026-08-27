@@ -54,12 +54,14 @@ PrePR Verify package or environment.
 | Setup            | `pre_pr_verify.pre_review_setup`; `pre_pr_verify.orchestration`  | `PreReviewSetup` → `prepare_review` → `record_setup_answer` → `authorize_verification_plan` → `require_ready_to_review` |
 | Planning         | `pre_pr_verify.verification`                                     | `discover_canonical_checks` → `PlannerCheckInput` / `TrustedPolicyCheckInput` → `build_verification_plan`               |
 | Execution        | `pre_pr_verify.orchestration`                                    | `authorize_verification_plan` → `execute_authorized_plan` → `load_completed_execution`                                  |
-| Semantic         | `pre_pr_verify.semantic`                                         | `bind_semantic_reference` → `build_semantic_assessment` → `load_semantic_assessment`                                    |
+| Semantic         | `pre_pr_verify.semantic`                                         | `bind_semantic_reference` → `canonical_winning_requirement_set` → `build_semantic_assessment` → `load_semantic_assessment` |
 | Reduction/report | `pre_pr_verify.orchestration`                                    | `finalize_review` → canonical artifact reload → exit mapping → `persist_final_report` / `emit_final_report`             |
 
 Supporting semantic types include `EvidenceReferenceKind`, `FindingCategory`, `FindingSeverity`, `FindingState`,
 `RequirementComparison`, `RequirementRelation`, `SemanticAxis`, `SemanticAxisAssessment`, `SemanticFinding`,
-`SemanticLimitGap`, and `SemanticStatus` from `pre_pr_verify.semantic_models`. Scope setup uses `ScopeIntent` and
+`SemanticLimitGap`, and `SemanticStatus` from `pre_pr_verify.semantic_models`. `canonical_winning_requirement_set`
+computes the expected Discovery winning-set count/digest; the reviewed binding must come from the actual progressive
+inspection. Scope setup uses `ScopeIntent` and
 `AdvisoryAction` from `scope_intent` plus `ScopeMode` from `models`; execution uses `CapabilityName` and
 `EnvironmentProfile` from `verification_models`. `ProvidedRequirement` comes from `discovery`, `RequirementCandidate`
 from `pre_review_setup`, `capture_changeset` from `git_capture`, and `__version__` from the package root.
@@ -167,7 +169,7 @@ marker authority. Preserve the full candidate count, order, precedence, authorit
 
 Offer: acknowledge one discovered winning source for inspection/context; enter brief explicit acceptance criteria;
 continue with a visible warning that Spec will remain `INCONCLUSIVE`; or cancel. Acknowledgement does not select
-authority, change precedence, remove equal-precedence candidates, or waive complete semantic reconciliation. Explicit
+authority, change precedence, remove equal-precedence candidates, or waive the complete reviewed-set binding. Explicit
 criteria become a `ProvidedRequirement` and discovery is rebuilt. Never promote implementation code, tests, or comments
 to requirements to obtain PASS. Headless mode still requires an explicit structured answer and never selects a
 recommendation implicitly.
@@ -449,11 +451,13 @@ implementation defect, contract mismatch, or missing-test gap remains
 authoritative when selected tests are green. A `test_gap` must be concrete and
 change-relevant, not hypothetical.
 
-A Spec `INCONCLUSIVE` result caused by the known 34-candidate reconciliation
-limit must not stop useful independent review of Standards, Impact, Test
-Sufficiency, or Contextual Security when those axes have sufficient evidence.
-Continue the gate and assessment for those axes; do not change requirement
-precedence or acknowledgement semantics.
+A 34-candidate winning set is not itself a semantic evidence gap. An exact
+reviewed-set binding permits progressive inspection of all candidates without
+persisting exhaustive compatible comparisons. An incomplete reviewed set or an
+actual concrete-comparison overflow must still leave Spec `INCONCLUSIVE`, but
+must not stop useful independent review of Standards, Impact, Test Sufficiency,
+or Contextual Security when those axes have sufficient evidence. Do not change
+requirement precedence or acknowledgement semantics.
 
 Do not persist private reasoning or a review transcript. Persist only concise
 bounded rationale and evidence-backed findings through the canonical contracts.
@@ -473,9 +477,11 @@ plan, and evidence identities. Provide exactly one `SemanticAxisAssessment` for
 Spec, Standards, Impact, Test Sufficiency, and Contextual Security. Empty
 findings never default an axis to PASS.
 
-Compare the complete winning requirement set as required by
-`<SKILL_ROOT>/docs/02_review_and_verdict_contracts.md`; do not
-drop candidates or fabricate comparisons. Findings cite stable captured paths,
+Inspect the complete winning requirement set progressively and bind the exact
+reviewed set to Discovery's canonical `candidate_source_ids` count and
+identity. Do not drop candidates or fabricate comparisons. Persist only
+concrete compatibility or contradiction evidence; exhaustive complementary
+pair/group records are not required. Findings cite stable captured paths,
 source IDs, check IDs, execution ordinals, or preservation signals. Build the
 bound assessment:
 
@@ -486,6 +492,7 @@ assessment = build_semantic_assessment(
     plan,
     evidence,
     axes=axis_assessments,
+    reviewed_requirement_sources=reviewed_requirement_sources,
     findings=findings,
     requirement_comparisons=requirement_comparisons,
     limit_gaps=limit_gaps,
@@ -509,9 +516,10 @@ assessment = load_semantic_assessment(
 
 If bounded collection raises `SemanticLimitExceeded` after a non-empty scope
 exists, preserve its `SemanticLimitGap`; affected axes stay `INCONCLUSIVE` with
-`required_evidence_gap=True`. Only a real `requirement_comparisons...` gap may
-account for incomplete winning-candidate comparison coverage. This is review
-evidence, never preflight/code 3.
+`required_evidence_gap=True`. A `requirement_comparisons...` gap means that
+concrete semantic evidence overflowed its persisted bound; it does not measure
+the complete winning-set review. A reviewed-set mismatch likewise remains a
+Spec evidence gap. These are review evidence, never preflight/code 3.
 
 ### 7. Deterministic finalization and canonical report
 

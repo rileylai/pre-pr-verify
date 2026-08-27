@@ -27,7 +27,10 @@ from pre_pr_verify.scope_intent import (
     discover_scope_options,
     resolve_scope_selection,
 )
-from pre_pr_verify.semantic import build_semantic_assessment
+from pre_pr_verify.semantic import (
+    build_semantic_assessment,
+    canonical_winning_requirement_set,
+)
 from pre_pr_verify.semantic_models import SemanticAxis, SemanticAxisAssessment, SemanticStatus
 from pre_pr_verify.verification import PlannerCheckInput, build_verification_plan
 from pre_pr_verify.verification_models import (
@@ -211,6 +214,7 @@ def finalized_review(repository: Path, tmp_path: Path):
             )
             for axis in SemanticAxis
         ),
+        reviewed_requirement_sources=canonical_winning_requirement_set(discovery),
     )
     return repository, orchestration.finalize_review(
         changeset,
@@ -694,6 +698,7 @@ def test_finalization_reloads_semantics_and_returns_canonical_report(
             )
             for axis in SemanticAxis
         ),
+        reviewed_requirement_sources=canonical_winning_requirement_set(discovery),
     )
 
     result = orchestration.finalize_review(
@@ -1416,6 +1421,7 @@ def test_canonical_full_review_lifecycle_is_deterministic(
             )
             for axis in SemanticAxis
         ),
+        reviewed_requirement_sources=canonical_winning_requirement_set(discovery),
     )
     finalized = orchestration.finalize_review(
         changeset,

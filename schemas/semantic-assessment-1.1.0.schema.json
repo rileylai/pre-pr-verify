@@ -1,0 +1,468 @@
+{
+  "$defs": {
+    "EvidenceReferenceKind": {
+      "enum": [
+        "change_path",
+        "discovery_source",
+        "plan_check",
+        "execution",
+        "source_preservation"
+      ],
+      "title": "EvidenceReferenceKind",
+      "type": "string"
+    },
+    "FindingCategory": {
+      "enum": [
+        "spec_mismatch",
+        "spec_partial",
+        "spec_contradiction",
+        "out_of_scope",
+        "standard_violation",
+        "impact_regression",
+        "test_gap",
+        "contextual_security",
+        "unsupported_suspicion"
+      ],
+      "title": "FindingCategory",
+      "type": "string"
+    },
+    "FindingSeverity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "title": "FindingSeverity",
+      "type": "string"
+    },
+    "FindingState": {
+      "enum": [
+        "confirmed",
+        "unverified",
+        "evidence_gap"
+      ],
+      "title": "FindingState",
+      "type": "string"
+    },
+    "RequirementComparison": {
+      "additionalProperties": false,
+      "properties": {
+        "rationale": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "relation": {
+          "$ref": "#/$defs/RequirementRelation"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "title": "Source Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source_ids",
+        "relation",
+        "rationale"
+      ],
+      "title": "RequirementComparison",
+      "type": "object"
+    },
+    "RequirementRelation": {
+      "enum": [
+        "complementary",
+        "contradictory"
+      ],
+      "title": "RequirementRelation",
+      "type": "string"
+    },
+    "SemanticAxis": {
+      "enum": [
+        "spec",
+        "standards",
+        "impact",
+        "test_sufficiency",
+        "contextual_security"
+      ],
+      "title": "SemanticAxis",
+      "type": "string"
+    },
+    "SemanticAxisAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "axis": {
+          "$ref": "#/$defs/SemanticAxis"
+        },
+        "finding_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$",
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Finding Ids",
+          "type": "array"
+        },
+        "rationale": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "required_evidence_gap": {
+          "default": false,
+          "title": "Required Evidence Gap",
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/SemanticStatus"
+        }
+      },
+      "required": [
+        "axis",
+        "status",
+        "rationale"
+      ],
+      "title": "SemanticAxisAssessment",
+      "type": "object"
+    },
+    "SemanticEvidenceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "changeset_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Changeset Identity",
+          "type": "string"
+        },
+        "detail": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "discovery_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Discovery Identity",
+          "type": "string"
+        },
+        "evidence_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Evidence Identity",
+          "type": "string"
+        },
+        "identifier": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Identifier",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/EvidenceReferenceKind"
+        },
+        "plan_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Identity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "identifier",
+        "detail",
+        "changeset_identity",
+        "discovery_identity",
+        "plan_identity",
+        "evidence_identity"
+      ],
+      "title": "SemanticEvidenceReference",
+      "type": "object"
+    },
+    "SemanticFinding": {
+      "additionalProperties": false,
+      "properties": {
+        "axis": {
+          "$ref": "#/$defs/SemanticAxis"
+        },
+        "blocking": {
+          "title": "Blocking",
+          "type": "boolean"
+        },
+        "category": {
+          "$ref": "#/$defs/FindingCategory"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/SemanticEvidenceReference"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "explanation": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "finding_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/FindingSeverity"
+        },
+        "state": {
+          "$ref": "#/$defs/FindingState"
+        },
+        "title": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "axis",
+        "category",
+        "state",
+        "severity",
+        "blocking",
+        "title",
+        "explanation",
+        "evidence"
+      ],
+      "title": "SemanticFinding",
+      "type": "object"
+    },
+    "SemanticLimitConcern": {
+      "enum": [
+        "prose",
+        "identifier",
+        "semantic_collection"
+      ],
+      "title": "SemanticLimitConcern",
+      "type": "string"
+    },
+    "SemanticLimitGap": {
+      "additionalProperties": false,
+      "properties": {
+        "affected_axes": {
+          "items": {
+            "$ref": "#/$defs/SemanticAxis"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Affected Axes",
+          "type": "array"
+        },
+        "concern": {
+          "$ref": "#/$defs/SemanticLimitConcern"
+        },
+        "field": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        },
+        "input_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Identity",
+          "type": "string"
+        },
+        "limit": {
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "observed": {
+          "minimum": 1,
+          "title": "Observed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "concern",
+        "field",
+        "limit",
+        "observed",
+        "affected_axes",
+        "input_identity"
+      ],
+      "title": "SemanticLimitGap",
+      "type": "object"
+    },
+    "SemanticReferenceIndex": {
+      "additionalProperties": false,
+      "properties": {
+        "changed_paths": {
+          "$ref": "#/$defs/SemanticReferenceSet"
+        },
+        "discovery_sources": {
+          "$ref": "#/$defs/SemanticReferenceSet"
+        },
+        "execution_ordinals": {
+          "$ref": "#/$defs/SemanticReferenceSet"
+        },
+        "identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Identity",
+          "type": "string"
+        },
+        "plan_checks": {
+          "$ref": "#/$defs/SemanticReferenceSet"
+        },
+        "preservation_ordinals": {
+          "$ref": "#/$defs/SemanticReferenceSet"
+        }
+      },
+      "required": [
+        "changed_paths",
+        "discovery_sources",
+        "plan_checks",
+        "execution_ordinals",
+        "preservation_ordinals",
+        "identity"
+      ],
+      "title": "SemanticReferenceIndex",
+      "type": "object"
+    },
+    "SemanticReferenceSet": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Identity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "count",
+        "identity"
+      ],
+      "title": "SemanticReferenceSet",
+      "type": "object"
+    },
+    "SemanticStatus": {
+      "enum": [
+        "pass",
+        "fail",
+        "inconclusive"
+      ],
+      "title": "SemanticStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "axes": {
+      "items": {
+        "$ref": "#/$defs/SemanticAxisAssessment"
+      },
+      "maxItems": 5,
+      "minItems": 5,
+      "title": "Axes",
+      "type": "array"
+    },
+    "changeset_identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Changeset Identity",
+      "type": "string"
+    },
+    "contract": {
+      "const": "semantic_assessment",
+      "default": "semantic_assessment",
+      "title": "Contract",
+      "type": "string"
+    },
+    "discovery_identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Discovery Identity",
+      "type": "string"
+    },
+    "evidence_identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Evidence Identity",
+      "type": "string"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/SemanticFinding"
+      },
+      "maxItems": 128,
+      "title": "Findings",
+      "type": "array"
+    },
+    "identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Identity",
+      "type": "string"
+    },
+    "limit_gaps": {
+      "items": {
+        "$ref": "#/$defs/SemanticLimitGap"
+      },
+      "maxItems": 16,
+      "title": "Limit Gaps",
+      "type": "array"
+    },
+    "plan_identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Plan Identity",
+      "type": "string"
+    },
+    "reference_index": {
+      "$ref": "#/$defs/SemanticReferenceIndex"
+    },
+    "requirement_comparisons": {
+      "items": {
+        "$ref": "#/$defs/RequirementComparison"
+      },
+      "maxItems": 64,
+      "title": "Requirement Comparisons",
+      "type": "array"
+    },
+    "reviewed_requirement_sources": {
+      "$ref": "#/$defs/SemanticReferenceSet"
+    },
+    "schema_version": {
+      "const": "1.1.0",
+      "default": "1.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "changeset_identity",
+    "discovery_identity",
+    "plan_identity",
+    "evidence_identity",
+    "reviewed_requirement_sources",
+    "axes",
+    "reference_index",
+    "identity"
+  ],
+  "title": "SemanticAssessment",
+  "type": "object"
+}

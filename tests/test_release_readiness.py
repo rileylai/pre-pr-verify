@@ -10,6 +10,7 @@ from pre_pr_verify.schema import (
     render_legacy_review_artifact_schema,
     render_legacy_changeset_schema,
     render_review_artifact_schema,
+    render_legacy_semantic_assessment_schema,
     render_semantic_assessment_schema,
     render_verification_evidence_schema,
     render_verification_plan_schema,
@@ -23,7 +24,8 @@ def test_all_v1_schemas_are_available_from_checkout_and_installed_core() -> None
         "discovery-1.0.0.schema.json": render_discovery_schema,
         "verification-plan-1.1.0.schema.json": render_verification_plan_schema,
         "verification-evidence-1.1.0.schema.json": render_verification_evidence_schema,
-        "semantic-assessment-1.0.0.schema.json": render_semantic_assessment_schema,
+        "semantic-assessment-1.0.0.schema.json": render_legacy_semantic_assessment_schema,
+        "semantic-assessment-1.1.0.schema.json": render_semantic_assessment_schema,
         "review-artifact-1.0.0.schema.json": render_legacy_review_artifact_schema,
         "review-artifact-1.1.0.schema.json": render_review_artifact_schema,
     }

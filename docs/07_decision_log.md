@@ -126,7 +126,7 @@ Semantic judgment is represented as a separate `semantic_assessment-1.0.0` contr
 
 **Status:** Accepted
 
-Semantic assessment loading uses a canonical reference index derived from the four bound deterministic artifacts. Producer and external deserialization use the same validator; identity recomputation alone is insufficient. Reference kinds must be capable of supporting the cited finding, and all winning equal-precedence requirement candidates require pair/group comparison coverage. Empty ChangeSets stop at `nothing_to_review`. Assessment free text and collections are bounded so the contract cannot become a second source/log artifact. ADR-022 refines the index representation and separates these artifact bounds from presentation and runtime context budgets.
+Semantic assessment loading uses a canonical reference index derived from the four bound deterministic artifacts. Producer and external deserialization use the same validator; identity recomputation alone is insufficient. Reference kinds must be capable of supporting the cited finding. The frozen 1.0.0 contract requires pair/group comparison coverage; current 1.1.0 instead binds the complete reviewed winning-source set separately and treats comparisons as bounded concrete evidence. Empty ChangeSets stop at `nothing_to_review`. Assessment free text and collections are bounded so the contract cannot become a second source/log artifact. ADR-022 refines the index representation and separates these artifact bounds from presentation and runtime context budgets.
 
 The Markdown renderer renders the human report from canonical `ReviewArtifact` JSON. The default report is concise: verdict, axis statuses, checks, finding summaries, and references. Detailed evidence is expandable or on demand; long reasoning and evidence are not duplicated into a second report artifact. This ADR does not change the reducer or ReviewArtifact contract.
 
@@ -138,7 +138,7 @@ Semantic-assessment character/count limits bound only canonical persisted artifa
 
 No semantic prose or collection is silently truncated. Limit failures are structured as prose or semantic-collection concerns. Prose may be compacted and retried only with its semantic structure and evidence bindings unchanged. A collection gap requires affected axes to remain inconclusive, and an overflow cannot produce a five-axis pass. The canonical reference index uses complete-set counts and digests instead of a bounded second copy of target IDs; actual reference existence is revalidated against the bound artifacts.
 
-Requirement comparisons have group semantics. One comparison classifies the complete cited group and covers all pairs within it; overlaps are ambiguous and rejected, and missing pair coverage is rejected. Thus a 16-source winning set can be completely reconciled by one group comparison and does not require raising the 64-comparison bound. ReviewArtifact owns concise presentation only: presentation limits may select detail for display but never delete canonical evidence. This decision adds no reducer, renderer, `ReviewArtifact`, model token limit, or provider policy.
+The frozen 1.0.0 comparison contract has group semantics: one comparison classifies the complete cited group, covers all pairs within it, rejects ambiguous overlaps, and rejects missing pair coverage. Current 1.1.0 preserves the same bounded record shape and contradiction integrity but no longer uses pair/group coverage as the review-completeness invariant; complete reviewed-set count and identity bind that invariant. ReviewArtifact owns concise presentation only: presentation limits may select detail for display but never delete canonical evidence. This decision adds no reducer, renderer, `ReviewArtifact`, model token limit, or provider policy.
 
 ## ADR-023: Fail-closed semantic axis ownership and authority sets
 
@@ -277,12 +277,11 @@ cancellation, and rejects canonical review until final confirmation. Rendering,
 prompting, ChangeSet capture, requirement discovery, execution authorization,
 semantic judgment, and reduction remain with their existing owners.
 
-Once a non-empty ChangeSet exists, a real bounded requirement-reconciliation
-overflow is a structured `SemanticLimitGap`, not preflight/no-review. Only a
-Spec-affecting `requirement_comparisons...` collection gap can account for
-incomplete winning-candidate comparison coverage; it requires Spec
-`INCONCLUSIVE` and preserves all candidates. Existing reducer precedence remains
-unchanged.
+Once a non-empty ChangeSet exists, a real bounded concrete-comparison overflow
+is a structured `SemanticLimitGap`, not preflight/no-review. It requires Spec
+`INCONCLUSIVE`, while review completeness is independently checked through the
+complete winning-set binding. Missing reviewed candidates cannot be hidden by
+the comparison bound. Existing reducer precedence remains unchanged.
 
 Installed verifier provenance uses a bounded deterministic SHA-256 over the
 installed Python core. It works in copied Skills and wheels without `.git`,
@@ -368,3 +367,19 @@ artifact, escapes or digests untrusted prose, and retains the existing bounded
 finding/gap/reference presentation. Frozen ReviewArtifact `1.0.0` remains
 loadable without the new summaries. No second report artifact, model benchmark,
 AST/dependency engine, scanner installation, or execution authority is added.
+
+## ADR-033: Bind complete winning-set reviewability separately from comparisons
+
+**Status:** Accepted
+
+SemanticAssessment `1.1.0` records `reviewed_requirement_sources` as the
+count-and-identity binding of Discovery's canonical winning
+`candidate_source_ids`. Producer construction and loading require an exact
+match, or an explicit Spec `INCONCLUSIVE` required-evidence gap. This proves
+review completeness without persisting every compatible pair or overlapping
+group. `RequirementComparison` remains a bounded collection of concrete
+compatibility or contradiction evidence; an actual collection overflow still
+creates a Spec `SemanticLimitGap`. The frozen `1.0.0` loader and schema retain
+their pair/group coverage semantics. No Discovery, ReviewArtifact, reducer,
+presentation, runtime-context, retrieval, batching, scheduler, or comparison
+database framework is added.

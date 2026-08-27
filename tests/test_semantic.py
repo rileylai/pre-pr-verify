@@ -20,6 +20,7 @@ from pre_pr_verify.semantic import (
     SemanticLimitExceeded,
     bind_semantic_reference,
     build_semantic_assessment,
+    canonical_winning_requirement_set,
     collect_semantic_context,
     iter_semantic_sources,
     load_semantic_assessment,
@@ -29,6 +30,7 @@ from pre_pr_verify.semantic_models import (
     FindingCategory,
     FindingSeverity,
     FindingState,
+    LegacySemanticAssessment,
     RequirementComparison,
     RequirementRelation,
     SemanticAssessment,
@@ -230,7 +232,15 @@ def finding(
     )
 
 
-def build(scope, *, axes_value=None, findings=(), comparisons=(), limit_gaps=()):
+def build(
+    scope,
+    *,
+    axes_value=None,
+    findings=(),
+    comparisons=(),
+    limit_gaps=(),
+    reviewed_requirement_sources=None,
+):
     changeset, discovery, plan, evidence = scope
     finding_values = list(findings)
     axis_values = list(axes_value or axes())
@@ -250,6 +260,10 @@ def build(scope, *, axes_value=None, findings=(), comparisons=(), limit_gaps=())
         plan,
         evidence,
         axes=axis_values,
+        reviewed_requirement_sources=(
+            reviewed_requirement_sources
+            or canonical_winning_requirement_set(discovery)
+        ),
         findings=finding_values,
         requirement_comparisons=comparisons,
         limit_gaps=limit_gaps,
@@ -540,6 +554,7 @@ def test_finding_axis_membership_is_complete_and_canonical(tmp_path: Path) -> No
             plan,
             evidence,
             axes=axes(spec=SemanticStatus.FAIL),
+            reviewed_requirement_sources=canonical_winning_requirement_set(discovery),
             findings=[blocker],
         )
 
@@ -604,7 +619,7 @@ def test_empty_changeset_is_nothing_to_review(tmp_path: Path) -> None:
         build(scope)
 
 
-def test_winning_equal_precedence_candidates_require_comparisons(
+def test_winning_equal_precedence_candidates_can_omit_compatible_comparisons(
     tmp_path: Path,
 ) -> None:
     scope = review_scope(
@@ -614,11 +629,16 @@ def test_winning_equal_precedence_candidates_require_comparisons(
             ProvidedRequirement("spec-b", "The API returns a string."),
         ],
     )
-    with pytest.raises(ValueError, match="omits"):
-        build(scope)
+    assessment = build(scope)
+
+    assert assessment.reviewed_requirement_sources == canonical_winning_requirement_set(
+        scope[1]
+    )
+    assert assessment.requirement_comparisons == []
+    assert load_semantic_assessment(assessment.model_dump(mode="json"), *scope) == assessment
 
 
-def test_contradictory_candidates_cannot_be_spec_pass_without_reconciliation(
+def test_unpersisted_candidate_relations_do_not_imply_contradiction(
     tmp_path: Path,
 ) -> None:
     scope = review_scope(
@@ -628,8 +648,48 @@ def test_contradictory_candidates_cannot_be_spec_pass_without_reconciliation(
             ProvidedRequirement("spec-b", "The API accepts strings."),
         ],
     )
-    with pytest.raises(ValueError, match="omits"):
-        build(scope, axes_value=axes(spec=SemanticStatus.PASS))
+    assessment = build(scope, axes_value=axes(spec=SemanticStatus.PASS))
+
+    assert assessment.axes[0].status is SemanticStatus.PASS
+    assert assessment.requirement_comparisons == []
+
+
+@pytest.mark.parametrize("reviewed", ["wrong_count", "wrong_identity"])
+def test_reviewed_winning_set_binding_requires_exact_count_and_identity(
+    tmp_path: Path,
+    reviewed: str,
+) -> None:
+    scope = review_scope(
+        tmp_path,
+        explicit_specs=[
+            ProvidedRequirement("spec-a", "The API accepts integers."),
+            ProvidedRequirement("spec-b", "The API returns a string."),
+        ],
+    )
+    expected = canonical_winning_requirement_set(scope[1])
+    if reviewed == "wrong_count":
+        supplied = expected.model_copy(update={"count": expected.count - 1})
+    else:
+        supplied = expected.model_copy(update={"identity": "0" * 64})
+
+    with pytest.raises(ValueError, match="reviewed winning requirement set mismatch"):
+        build(scope, reviewed_requirement_sources=supplied)
+
+    gap_axes = [
+        axis.model_copy(
+            update={
+                "status": SemanticStatus.INCONCLUSIVE,
+                "required_evidence_gap": True,
+            }
+        )
+        for axis in axes()
+    ]
+    assessment = build(
+        scope,
+        axes_value=gap_axes,
+        reviewed_requirement_sources=supplied,
+    )
+    assert assessment.axes[0].required_evidence_gap is True
 
 
 @pytest.mark.parametrize(
@@ -851,6 +911,40 @@ def test_normal_bounded_assessment_round_trips_through_loader(
     scope = review_scope(tmp_path)
     assessment = build(scope)
     assert load_semantic_assessment(assessment.model_dump(mode="json"), *scope) == assessment
+
+
+def test_legacy_semantic_assessment_loader_preserves_frozen_pair_semantics(
+    tmp_path: Path,
+) -> None:
+    scope = review_scope(
+        tmp_path,
+        explicit_specs=[
+            ProvidedRequirement("spec-a", "The API accepts integers."),
+            ProvidedRequirement("spec-b", "The API returns a string."),
+        ],
+    )
+    source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
+    assessment = build(
+        scope,
+        comparisons=[
+            RequirementComparison(
+                source_ids=source_ids,
+                relation=RequirementRelation.COMPLEMENTARY,
+                rationale="The frozen legacy assessment reconciles both sources.",
+            )
+        ],
+    )
+    payload = assessment.model_dump(mode="json")
+    payload.pop("reviewed_requirement_sources")
+    payload["schema_version"] = "1.0.0"
+    payload["identity"] = hash_payload(
+        {key: value for key, value in payload.items() if key != "identity"}
+    )
+
+    loaded = load_semantic_assessment(payload, *scope)
+
+    assert isinstance(loaded, LegacySemanticAssessment)
+    assert loaded.model_dump(mode="json") == payload
 
 
 def test_excessive_finding_and_comparison_collections_are_rejected(
@@ -1209,6 +1303,7 @@ def test_reference_index_summarizes_more_than_512_paths_without_loss(
         plan,
         evidence,
         axes=axes(),
+        reviewed_requirement_sources=canonical_winning_requirement_set(discovery),
     )
 
     assert assessment.reference_index.changed_paths.count == 513
@@ -1231,7 +1326,9 @@ def _comparison_scope(tmp_path: Path, count: int):
     )
 
 
-def test_sixteen_sources_have_complete_single_group_coverage(tmp_path: Path) -> None:
+def test_bounded_comparisons_are_concrete_evidence_not_set_coverage(
+    tmp_path: Path,
+) -> None:
     scope = _comparison_scope(tmp_path, 16)
     source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
     group = RequirementComparison(
@@ -1248,40 +1345,42 @@ def test_sixteen_sources_have_complete_single_group_coverage(tmp_path: Path) -> 
         relation=RequirementRelation.COMPLEMENTARY,
         rationale="One candidate was deliberately omitted.",
     )
-    with pytest.raises(ValueError, match="omits"):
-        build(scope, comparisons=[hidden])
+    partial = build(scope, comparisons=[hidden])
+    assert partial.requirement_comparisons == [hidden]
 
     overlapping = RequirementComparison(
         source_ids=source_ids[:2],
-        relation=RequirementRelation.CONTRADICTORY,
-        rationale="This attempts to reclassify a pair already covered by the group.",
+        relation=RequirementRelation.COMPLEMENTARY,
+        rationale="This is a separately material concrete relationship.",
     )
-    with pytest.raises(ValueError, match="overlap ambiguously"):
-        build(scope, comparisons=[group, overlapping])
+    overlapped = build(scope, comparisons=[group, overlapping])
+    assert len(overlapped.requirement_comparisons) == 2
+
+    with pytest.raises(ValueError, match="canonical"):
+        build(scope, comparisons=[group, group])
 
 
-def test_seventeen_sources_accept_group_and_pair_decomposition(tmp_path: Path) -> None:
+def test_seventeen_sources_accept_bounded_concrete_evidence_without_pair_coverage(
+    tmp_path: Path,
+) -> None:
     scope = _comparison_scope(tmp_path, 17)
     source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
     comparisons = [
         RequirementComparison(
             source_ids=source_ids[:-1],
             relation=RequirementRelation.COMPLEMENTARY,
-            rationale="The first sixteen winning candidates form one complete group.",
-        )
-    ]
-    comparisons.extend(
+            rationale="This is one materially important compatible group.",
+        ),
         RequirementComparison(
-            source_ids=sorted((source_id, source_ids[-1])),
+            source_ids=sorted((source_ids[0], source_ids[-1])),
             relation=RequirementRelation.COMPLEMENTARY,
-            rationale="The final winning candidate is reconciled with the group.",
-        )
-        for source_id in source_ids[:-1]
-    )
+            rationale="This is one additional concrete relationship.",
+        ),
+    ]
 
     assessment = build(scope, comparisons=comparisons)
 
-    assert len(assessment.requirement_comparisons) == 17
+    assert len(assessment.requirement_comparisons) == len(comparisons)
     assert assessment.limit_gaps == []
     assert load_semantic_assessment(
         assessment.model_dump(mode="json"), *scope
@@ -1295,19 +1394,11 @@ def test_representable_seventeen_sources_reject_fabricated_limit_gap(
     source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
     comparisons = [
         RequirementComparison(
-            source_ids=source_ids[:-1],
+            source_ids=source_ids[:2],
             relation=RequirementRelation.COMPLEMENTARY,
-            rationale="The first sixteen winning candidates form one complete group.",
+            rationale="This is a concrete compatible relationship.",
         )
     ]
-    comparisons.extend(
-        RequirementComparison(
-            source_ids=sorted((source_id, source_ids[-1])),
-            relation=RequirementRelation.COMPLEMENTARY,
-            rationale="The final winning candidate is reconciled with the group.",
-        )
-        for source_id in source_ids[:-1]
-    )
     fake_gap = SemanticLimitGap(
         concern=SemanticLimitConcern.SEMANTIC_COLLECTION,
         field="requirement_comparisons",
@@ -1335,7 +1426,7 @@ def test_representable_seventeen_sources_reject_fabricated_limit_gap(
         )
 
 
-def test_complete_seventeen_source_decomposition_at_record_limit_is_valid(
+def test_exactly_sixty_four_concrete_comparisons_are_valid(
     tmp_path: Path,
 ) -> None:
     scope = _comparison_scope(tmp_path, 17)
@@ -1428,39 +1519,6 @@ def test_real_comparison_record_overflow_retains_boundary_and_gap_binding(
     )
     with pytest.raises(ValueError, match="requirement comparison limit gap"):
         load_semantic_assessment(forged_payload, *scope)
-
-
-def test_exactly_sixty_four_nonoverlapping_comparisons_are_valid(
-    tmp_path: Path,
-) -> None:
-    scope = _comparison_scope(tmp_path, 12)
-    source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
-    trio = tuple(source_ids[:3])
-    comparisons = [
-        RequirementComparison(
-            source_ids=list(trio),
-            relation=RequirementRelation.COMPLEMENTARY,
-            rationale="This group jointly reconciles three candidates.",
-        )
-    ]
-    trio_pairs = {
-        tuple(sorted(pair))
-        for pair in ((trio[0], trio[1]), (trio[0], trio[2]), (trio[1], trio[2]))
-    }
-    for left_index, left in enumerate(source_ids):
-        for right in source_ids[left_index + 1 :]:
-            if (left, right) in trio_pairs:
-                continue
-            comparisons.append(
-                RequirementComparison(
-                    source_ids=[left, right],
-                    relation=RequirementRelation.COMPLEMENTARY,
-                    rationale="This pair was semantically reconciled.",
-                )
-            )
-    assert len(comparisons) == MAX_COMPARISONS
-    assessment = build(scope, comparisons=comparisons)
-    assert len(assessment.requirement_comparisons) == MAX_COMPARISONS
 
 
 def test_exactly_128_findings_are_valid(tmp_path: Path) -> None:

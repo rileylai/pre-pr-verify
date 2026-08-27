@@ -19,7 +19,11 @@ from pre_pr_verify.review import (
     verdict_exit_code,
 )
 from pre_pr_verify.review_models import AxisStatus, ReviewVerdict, hash_payload
-from pre_pr_verify.semantic import bind_semantic_reference, build_semantic_assessment
+from pre_pr_verify.semantic import (
+    bind_semantic_reference,
+    build_semantic_assessment,
+    canonical_winning_requirement_set,
+)
 from pre_pr_verify.semantic_models import (
     EvidenceReferenceKind,
     FindingCategory,
@@ -225,6 +229,7 @@ def assessment(scope, *, axes=None, findings=(), comparisons=(), limit_gaps=()):
         plan,
         evidence,
         axes=values,
+        reviewed_requirement_sources=canonical_winning_requirement_set(discovery),
         findings=findings,
         requirement_comparisons=comparisons,
         limit_gaps=limit_gaps,

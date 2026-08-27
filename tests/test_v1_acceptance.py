@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-from itertools import combinations
 from pathlib import Path
 
 import pytest
@@ -28,6 +27,7 @@ from pre_pr_verify.semantic import (
     SemanticLimitExceeded,
     bind_semantic_reference,
     build_semantic_assessment,
+    canonical_winning_requirement_set,
 )
 from pre_pr_verify.semantic_models import (
     EvidenceReferenceKind,
@@ -40,6 +40,7 @@ from pre_pr_verify.semantic_models import (
     SemanticAxisAssessment,
     SemanticFinding,
     SemanticLimitConcern,
+    SemanticReferenceSet,
     SemanticStatus,
     MAX_COMPARISONS,
 )
@@ -214,6 +215,7 @@ def complete_review(
     axis_values: list[SemanticAxisAssessment] | None = None,
     findings: list[SemanticFinding] | None = None,
     comparisons: list[RequirementComparison] | None = None,
+    reviewed_requirement_sources: SemanticReferenceSet | None = None,
 ) -> tuple[ReviewArtifact, str]:
     changeset, discovery, plan, evidence = scope
     findings = findings or []
@@ -223,6 +225,10 @@ def complete_review(
         plan,
         evidence,
         axes=axis_values or axes(findings=findings),
+        reviewed_requirement_sources=(
+            reviewed_requirement_sources
+            or canonical_winning_requirement_set(discovery)
+        ),
         findings=findings,
         requirement_comparisons=comparisons or [],
     )
@@ -338,6 +344,7 @@ def test_empty_scope_is_nothing_to_review_without_verdict(tmp_path: Path) -> Non
             plan,
             evidence,
             axes=axes(),
+            reviewed_requirement_sources=canonical_winning_requirement_set(discovery),
         )
 
 
@@ -393,7 +400,7 @@ def test_semantic_contradiction_is_inconclusive(tmp_path: Path) -> None:
     assert artifact.verdict is ReviewVerdict.INCONCLUSIVE
 
 
-def test_nonempty_thirty_four_requirement_limit_is_review_level_inconclusive(
+def test_nonempty_thirty_four_requirement_set_can_reach_ready(
     tmp_path: Path,
 ) -> None:
     specs = [
@@ -405,43 +412,74 @@ def test_nonempty_thirty_four_requirement_limit_is_review_level_inconclusive(
     assert scope[0].empty is False
     assert len(source_ids) == 34
 
-    attempted = [
-        RequirementComparison(
-            source_ids=list(pair),
-            relation=RequirementRelation.COMPLEMENTARY,
-            rationale=f"Attempted reconciliation {index}.",
-        )
-        for index, pair in enumerate(combinations(source_ids, 2))
-    ][: MAX_COMPARISONS + 1]
-    with pytest.raises(SemanticLimitExceeded) as overflow:
-        build_semantic_assessment(
-            *scope,
-            axes=axes(),
-            requirement_comparisons=attempted,
-    )
-    assert overflow.value.gap.concern is SemanticLimitConcern.SEMANTIC_COLLECTION
-    assert overflow.value.gap.field == "requirement_comparisons"
-    assert overflow.value.gap.limit == 64
-    assert overflow.value.gap.observed == MAX_COMPARISONS + 1
-    assert overflow.value.gap.affected_axes == [SemanticAxis.SPEC]
-    retained = list(overflow.value.values[:MAX_COMPARISONS])
-    assert len(retained) == MAX_COMPARISONS
-    assert all(isinstance(item, RequirementComparison) for item in retained)
+    artifact, _ = complete_review(scope)
 
-    assessment = build_semantic_assessment(
-        *scope,
-        axes=axes(
+    assert artifact.verdict is ReviewVerdict.READY
+    assert verdict_exit_code(artifact.verdict) == 0
+
+
+def test_incomplete_thirty_four_requirement_set_is_inconclusive(
+    tmp_path: Path,
+) -> None:
+    specs = [
+        ProvidedRequirement(f"requirement-{index}", f"Criterion {index} must hold.")
+        for index in range(34)
+    ]
+    scope = deterministic_scope(repository(tmp_path), explicit_specs=specs)
+    expected = canonical_winning_requirement_set(scope[1])
+    incomplete = expected.model_copy(update={"count": expected.count - 1})
+    gap_axes = axes(
+        statuses={SemanticAxis.SPEC: SemanticStatus.INCONCLUSIVE},
+        gaps={SemanticAxis.SPEC},
+    )
+
+    artifact, _ = complete_review(
+        scope,
+        axis_values=gap_axes,
+        reviewed_requirement_sources=incomplete,
+    )
+
+    assert artifact.verdict is ReviewVerdict.INCONCLUSIVE
+    assert verdict_exit_code(artifact.verdict) == 2
+
+
+def test_thirty_four_requirement_set_preserves_concrete_contradiction_evidence(
+    tmp_path: Path,
+) -> None:
+    specs = [
+        ProvidedRequirement(f"requirement-{index}", f"Criterion {index} must hold.")
+        for index in range(34)
+    ]
+    scope = deterministic_scope(repository(tmp_path), explicit_specs=specs)
+    source_ids = sorted(scope[1].requirement_resolution.candidate_source_ids)
+    conflict_ids = sorted((source_ids[6], source_ids[18]))
+    conflict = finding(
+        scope,
+        finding_id="winning-requirements-conflict-34",
+        axis=SemanticAxis.SPEC,
+        category=FindingCategory.SPEC_CONTRADICTION,
+        state=FindingState.EVIDENCE_GAP,
+        blocking=False,
+        references=[
+            reference(scope, EvidenceReferenceKind.DISCOVERY_SOURCE, source_id)
+            for source_id in conflict_ids
+        ],
+    )
+    comparison = RequirementComparison(
+        source_ids=conflict_ids,
+        relation=RequirementRelation.CONTRADICTORY,
+        rationale="These two winning requirements are materially contradictory.",
+    )
+
+    artifact, _ = complete_review(
+        scope,
+        findings=[conflict],
+        comparisons=[comparison],
+        axis_values=axes(
             statuses={SemanticAxis.SPEC: SemanticStatus.INCONCLUSIVE},
             gaps={SemanticAxis.SPEC},
+            findings=[conflict],
         ),
-        requirement_comparisons=retained,
-        limit_gaps=[overflow.value.gap],
-    )
-    artifact = build_review_artifact(
-        *scope,
-        assessment,
-        verifier_version=VERIFIER_VERSION,
-        verifier_commit_or_build=VERIFIER_BUILD,
     )
 
     assert artifact.verdict is ReviewVerdict.INCONCLUSIVE
@@ -517,7 +555,12 @@ def test_forged_persisted_review_artifact_fails_closed(tmp_path: Path) -> None:
     scope = deterministic_scope(repository(tmp_path))
     changeset, discovery, plan, evidence = scope
     assessment = build_semantic_assessment(
-        changeset, discovery, plan, evidence, axes=axes()
+        changeset,
+        discovery,
+        plan,
+        evidence,
+        axes=axes(),
+        reviewed_requirement_sources=canonical_winning_requirement_set(discovery),
     )
     artifact = build_review_artifact(
         changeset,

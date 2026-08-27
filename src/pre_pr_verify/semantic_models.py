@@ -5,12 +5,13 @@ import json
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, ValidationInfo, model_validator
+from pydantic import ConfigDict, Field, ValidationInfo, model_validator
 
 from pre_pr_verify.models import FrozenModel, RawPath, SHA256_PATTERN
 
 
-SEMANTIC_ASSESSMENT_SCHEMA_VERSION = "1.0.0"
+LEGACY_SEMANTIC_ASSESSMENT_SCHEMA_VERSION = "1.0.0"
+SEMANTIC_ASSESSMENT_SCHEMA_VERSION = "1.1.0"
 
 # These are contract bounds, not token-accounting or retrieval limits.
 MAX_AXIS_RATIONALE_CHARS = 2_048
@@ -251,13 +252,99 @@ class SemanticReferenceIndex(FrozenModel):
         return self
 
 
+def _validate_semantic_assessment_contract(
+    model: Any,
+    info: ValidationInfo,
+) -> None:
+    expected_index = info.context.get("semantic_scope") if info.context else None
+    expected_identities = (
+        info.context.get("scope_identities") if info.context else None
+    )
+    if not isinstance(expected_index, SemanticReferenceIndex) or not isinstance(
+        expected_identities, tuple
+    ):
+        raise ValueError(
+            "semantic assessment requires canonical scope validation"
+        )
+    if model.reference_index != expected_index:
+        raise ValueError("semantic reference index does not match bound evidence")
+    if (
+        model.changeset_identity,
+        model.discovery_identity,
+        model.plan_identity,
+        model.evidence_identity,
+    ) != expected_identities:
+        raise ValueError("semantic assessment identities do not match bound evidence")
+    expected_axes = list(SemanticAxis)
+    if [axis.axis for axis in model.axes] != expected_axes:
+        raise ValueError("semantic axes must be complete and canonically ordered")
+    comparison_keys = [tuple(item.source_ids) for item in model.requirement_comparisons]
+    if comparison_keys != sorted(set(comparison_keys)):
+        raise ValueError("requirement comparisons must be canonical")
+    gap_keys = [(gap.concern.value, gap.field) for gap in model.limit_gaps]
+    if gap_keys != sorted(set(gap_keys)):
+        raise ValueError("semantic limit gaps must be canonical")
+    finding_ids = [finding.finding_id for finding in model.findings]
+    if finding_ids != sorted(set(finding_ids)):
+        raise ValueError("semantic finding IDs must be unique and canonical")
+    known_findings = set(finding_ids)
+    owners: dict[str, SemanticAxis] = {}
+    for axis in model.axes:
+        if not set(axis.finding_ids) <= known_findings:
+            raise ValueError("axis references an unknown semantic finding")
+        for finding_id in axis.finding_ids:
+            if finding_id in owners:
+                raise ValueError("semantic finding ownership must be unique")
+            owners[finding_id] = axis.axis
+    if set(owners) != known_findings:
+        raise ValueError("semantic finding ownership is incomplete; orphan finding")
+    finding_by_id = {finding.finding_id: finding for finding in model.findings}
+    if any(
+        finding_by_id[finding_id].axis is not owner
+        for finding_id, owner in owners.items()
+    ):
+        raise ValueError("semantic finding ownership does not match its declared axis")
+    for axis in model.axes:
+        if axis.status is SemanticStatus.PASS and any(
+            finding_by_id[finding_id].state is FindingState.CONFIRMED
+            and finding_by_id[finding_id].blocking
+            for finding_id in axis.finding_ids
+        ):
+            raise ValueError("PASS axis cannot own a confirmed blocking finding")
+    for finding in model.findings:
+        for reference in finding.evidence:
+            if (
+                reference.changeset_identity != model.changeset_identity
+                or reference.discovery_identity != model.discovery_identity
+                or reference.plan_identity != model.plan_identity
+                or reference.evidence_identity != model.evidence_identity
+            ):
+                raise ValueError("semantic evidence reference is not bound")
+    axis_by_kind = {axis.axis: axis for axis in model.axes}
+    for gap in model.limit_gaps:
+        if gap.concern is not SemanticLimitConcern.SEMANTIC_COLLECTION:
+            continue
+        for affected_axis in gap.affected_axes:
+            axis = axis_by_kind[affected_axis]
+            if (
+                axis.status is not SemanticStatus.INCONCLUSIVE
+                or not axis.required_evidence_gap
+            ):
+                raise ValueError(
+                    "semantic collection overflow requires an inconclusive evidence-gap axis"
+                )
+    if model.identity != hash_payload(model.semantic_payload()):
+        raise ValueError("semantic assessment identity does not match payload")
+
+
 class SemanticAssessment(FrozenModel):
     contract: Literal["semantic_assessment"] = "semantic_assessment"
-    schema_version: Literal["1.0.0"] = "1.0.0"
+    schema_version: Literal["1.1.0"] = SEMANTIC_ASSESSMENT_SCHEMA_VERSION
     changeset_identity: str = Field(pattern=SHA256_PATTERN)
     discovery_identity: str = Field(pattern=SHA256_PATTERN)
     plan_identity: str = Field(pattern=SHA256_PATTERN)
     evidence_identity: str = Field(pattern=SHA256_PATTERN)
+    reviewed_requirement_sources: SemanticReferenceSet
     requirement_comparisons: list[RequirementComparison] = Field(
         default_factory=list, max_length=MAX_COMPARISONS
     )
@@ -278,85 +365,41 @@ class SemanticAssessment(FrozenModel):
     def validate_contract(
         self, info: ValidationInfo
     ) -> SemanticAssessment:
-        expected_index = info.context.get("semantic_scope") if info.context else None
-        expected_identities = (
-            info.context.get("scope_identities") if info.context else None
-        )
-        if not isinstance(expected_index, SemanticReferenceIndex) or not isinstance(
-            expected_identities, tuple
-        ):
-            raise ValueError(
-                "semantic assessment requires canonical scope validation"
-            )
-        if self.reference_index != expected_index:
-            raise ValueError("semantic reference index does not match bound evidence")
-        if (
-            self.changeset_identity,
-            self.discovery_identity,
-            self.plan_identity,
-            self.evidence_identity,
-        ) != expected_identities:
-            raise ValueError("semantic assessment identities do not match bound evidence")
-        expected_axes = list(SemanticAxis)
-        if [axis.axis for axis in self.axes] != expected_axes:
-            raise ValueError("semantic axes must be complete and canonically ordered")
-        comparison_keys = [tuple(item.source_ids) for item in self.requirement_comparisons]
-        if comparison_keys != sorted(set(comparison_keys)):
-            raise ValueError("requirement comparisons must be canonical")
-        gap_keys = [(gap.concern.value, gap.field) for gap in self.limit_gaps]
-        if gap_keys != sorted(set(gap_keys)):
-            raise ValueError("semantic limit gaps must be canonical")
-        finding_ids = [finding.finding_id for finding in self.findings]
-        if finding_ids != sorted(set(finding_ids)):
-            raise ValueError("semantic finding IDs must be unique and canonical")
-        known_findings = set(finding_ids)
-        owners: dict[str, SemanticAxis] = {}
-        for axis in self.axes:
-            if not set(axis.finding_ids) <= known_findings:
-                raise ValueError("axis references an unknown semantic finding")
-            for finding_id in axis.finding_ids:
-                if finding_id in owners:
-                    raise ValueError("semantic finding ownership must be unique")
-                owners[finding_id] = axis.axis
-        if set(owners) != known_findings:
-            raise ValueError("semantic finding ownership is incomplete; orphan finding")
-        finding_by_id = {finding.finding_id: finding for finding in self.findings}
-        if any(
-            finding_by_id[finding_id].axis is not owner
-            for finding_id, owner in owners.items()
-        ):
-            raise ValueError("semantic finding ownership does not match its declared axis")
-        for axis in self.axes:
-            if axis.status is SemanticStatus.PASS and any(
-                finding_by_id[finding_id].state is FindingState.CONFIRMED
-                and finding_by_id[finding_id].blocking
-                for finding_id in axis.finding_ids
-            ):
-                raise ValueError("PASS axis cannot own a confirmed blocking finding")
-        for finding in self.findings:
-            for reference in finding.evidence:
-                if (
-                    reference.changeset_identity != self.changeset_identity
-                    or reference.discovery_identity != self.discovery_identity
-                    or reference.plan_identity != self.plan_identity
-                    or reference.evidence_identity != self.evidence_identity
-                ):
-                    raise ValueError("semantic evidence reference is not bound")
-        axis_by_kind = {axis.axis: axis for axis in self.axes}
-        for gap in self.limit_gaps:
-            if gap.concern is not SemanticLimitConcern.SEMANTIC_COLLECTION:
-                continue
-            for affected_axis in gap.affected_axes:
-                axis = axis_by_kind[affected_axis]
-                if (
-                    axis.status is not SemanticStatus.INCONCLUSIVE
-                    or not axis.required_evidence_gap
-                ):
-                    raise ValueError(
-                        "semantic collection overflow requires an inconclusive evidence-gap axis"
-                    )
-        if self.identity != hash_payload(self.semantic_payload()):
-            raise ValueError("semantic assessment identity does not match payload")
+        _validate_semantic_assessment_contract(self, info)
+        return self
+
+
+class LegacySemanticAssessment(FrozenModel):
+    model_config = ConfigDict(title="SemanticAssessment")
+    contract: Literal["semantic_assessment"] = "semantic_assessment"
+    schema_version: Literal["1.0.0"] = LEGACY_SEMANTIC_ASSESSMENT_SCHEMA_VERSION
+    changeset_identity: str = Field(pattern=SHA256_PATTERN)
+    discovery_identity: str = Field(pattern=SHA256_PATTERN)
+    plan_identity: str = Field(pattern=SHA256_PATTERN)
+    evidence_identity: str = Field(pattern=SHA256_PATTERN)
+    requirement_comparisons: list[RequirementComparison] = Field(
+        default_factory=list, max_length=MAX_COMPARISONS
+    )
+    limit_gaps: list[SemanticLimitGap] = Field(
+        default_factory=list, max_length=MAX_LIMIT_GAPS
+    )
+    axes: list[SemanticAxisAssessment] = Field(
+        min_length=len(SemanticAxis), max_length=len(SemanticAxis)
+    )
+    findings: list[SemanticFinding] = Field(
+        default_factory=list, max_length=MAX_FINDINGS
+    )
+    reference_index: SemanticReferenceIndex
+    identity: str = Field(pattern=SHA256_PATTERN)
+
+    def semantic_payload(self) -> dict[str, Any]:
+        return self.model_dump(mode="json", exclude={"identity"})
+
+    @model_validator(mode="after")
+    def validate_contract(
+        self, info: ValidationInfo
+    ) -> LegacySemanticAssessment:
+        _validate_semantic_assessment_contract(self, info)
         return self
 
 
