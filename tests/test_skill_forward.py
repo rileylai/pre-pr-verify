@@ -301,50 +301,45 @@ def test_bare_invocation_requires_a_mandatory_senior_inspection_gate() -> None:
     assert "concrete findings are recorded when supported" in inspection
 
 
-def test_full_review_requires_user_visible_canonical_report_handoff() -> None:
+def test_full_review_requires_verified_ephemeral_report_handoff() -> None:
     skill = Path("SKILL.md").read_text()
     runbook = Path("docs/09_v1_skill_runbook.md").read_text()
 
     skill_flow = skill[skill.index("## V1 flow") : skill.index("## Pre-review setup interaction")]
-    finalization = runbook[runbook.index("### 7. Deterministic finalization") : runbook.index("### 8. Emit the canonical report")]
-    delivery = runbook[runbook.index("### 8. Emit the canonical report") :]
+    finalization = runbook[runbook.index("### 7. Deterministic finalization") : runbook.index("### 8. Persist and hand off the canonical report")]
+    delivery = runbook[runbook.index("### 8. Persist and hand off the canonical report") :]
     skill_flow_text = " ".join(skill_flow.split())
     finalization_text = " ".join(finalization.split())
     delivery_text = " ".join(delivery.split())
 
-    assert "`finalized.report` is the canonical Markdown report" in skill_flow_text
-    assert "stdout success alone is not review completion" in skill_flow_text
-    assert "`finalized.report` verbatim" in skill_flow_text
-    assert "actual assistant final response shown to the user" in skill_flow_text
-    assert "user, beginning `# PrePR Verify Report`" in skill_flow_text
+    assert "`finalized.report` is canonical" in skill_flow_text
+    assert "persist_final_report(finalized, author_repository=TARGET_REPOSITORY_ROOT)" in skill_flow_text
+    assert "surface only its verdict and path" in skill_flow_text
+    assert "Do not reproduce or summarize the report inline" in skill_flow_text
+    assert "emit_final_report" in skill_flow_text
 
-    assert "writes `finalized.report` exactly to stdout by" in delivery_text
-    assert "stdout success alone is not review completion" in delivery_text
-    assert "actual assistant final response shown to the user" in delivery_text
-    assert "exact verbatim `finalized.report`" in delivery_text
-    assert "transport layer, not a renderer" in delivery_text
-    assert "Do not end with `report emitted above`, `canonical report above`, `review complete`" in delivery_text
-    assert "path-only message" in delivery_text
-    assert "summary-only message" in delivery_text
-    assert "user-visible canonical report handoff succeeds" in delivery_text
+    assert "persist_final_report(" in finalization_text
+    assert "author_repository=TARGET_REPOSITORY_ROOT" in finalization_text
+    assert "PrePR Verify verdict: {artifact.verdict.value}" in finalization_text
+    assert "Canonical report: {handoff.path}" in finalization_text
 
-    assert "Once stdout emission succeeds, END REVIEW" not in skill_flow_text
-    assert "Once stdout emission succeeds, END REVIEW" not in delivery_text
+    assert "writes the exact UTF-8 bytes of `finalized.report` once" in delivery_text
+    assert "fresh, private, verifier-owned temporary directory outside the author repository" in delivery_text
+    assert "byte-for-byte equality, byte length, and SHA-256" in delivery_text
+    assert "compact receipt containing the canonical verdict and `handoff.path`" in delivery_text
+    assert "Do not reproduce, reconstruct, or summarize the Markdown report body inline" in delivery_text
+    assert "system temporary cleanup may remove it later" in delivery_text
+    assert "Do not dump the full report to stdout merely so a model can copy it" in delivery_text
+    assert "do not rerun execution" in delivery_text
+
+    assert "transport finalized.report verbatim" not in delivery_text
+    assert "actual assistant final response shown to the user" not in delivery_text
 
     assert finalization_text.index("finalize_review(") < finalization_text.index(
-        "emit_final_report(finalized)"
+        "persist_final_report("
     )
-    assert finalization_text.index("emit_final_report(finalized)") < finalization_text.index(
-        "transport finalized.report verbatim"
-    )
-    assert finalization_text.index("transport finalized.report verbatim") < finalization_text.index(
+    assert finalization_text.index("persist_final_report(") < finalization_text.index(
         "END REVIEW only after"
-    )
-    assert delivery_text.index("emit_final_report(finalized)") < delivery_text.index(
-        "actual assistant final response shown to"
-    )
-    assert delivery_text.index("actual assistant final response shown to") < delivery_text.index(
-        "`END REVIEW` occurs only after"
     )
 
 

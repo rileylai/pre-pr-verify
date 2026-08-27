@@ -32,3 +32,7 @@ class EvidenceReuseError(PrePRVerifyError):
 
 class ExecutionAuthorizationRequired(PreflightError):
     """Setup did not authorize execution of verification checks."""
+
+
+class FinalReportHandoffError(PrePRVerifyError):
+    """The canonical human-facing report could not be safely handed off."""

@@ -48,12 +48,12 @@ Use canonical builders/loaders in order; read
    before assessment; a bare `$pre-pr-verify` invocation needs no extra prompt.
    Inspect implementation, context, contracts, errors, tests, impact, and
    security boundaries.
-5. After the gate, call `finalize_review(...)`; `finalized.report` is the
-   canonical Markdown report. `emit_final_report(finalized)` may write stdout,
-   but stdout success alone is not review completion. In human sessions, pass
-   `finalized.report` verbatim to the actual assistant final response shown to
-   the user, beginning `# PrePR Verify Report`; END REVIEW only after this
-   handoff. See runbook §8.
+5. After the gate, call `finalize_review(...)`; `finalized.report` is canonical.
+   In human sessions, call
+   `persist_final_report(finalized, author_repository=TARGET_REPOSITORY_ROOT)`;
+   after verification, surface only its verdict and path. Do not reproduce or
+   summarize the report inline. END REVIEW only after its location is surfaced.
+   Keep `emit_final_report` for explicit stdout/headless use. See runbook §8.
 
 `READY` requires five PASS axes and complete required evidence.
 `NEEDS_CHANGES` requires a confirmed blocking defect. `INCONCLUSIVE` means

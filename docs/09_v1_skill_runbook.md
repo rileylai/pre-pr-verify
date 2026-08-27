@@ -55,7 +55,7 @@ PrePR Verify package or environment.
 | Planning         | `pre_pr_verify.verification`                                     | `discover_canonical_checks` → `PlannerCheckInput` / `TrustedPolicyCheckInput` → `build_verification_plan`                     |
 | Execution        | `pre_pr_verify.orchestration`                                    | `authorize_verification_plan` → `execute_authorized_plan` → `load_completed_execution`                                       |
 | Semantic         | `pre_pr_verify.semantic`                                         | `bind_semantic_reference` → `build_semantic_assessment` → `load_semantic_assessment`                                          |
-| Reduction/report | `pre_pr_verify.orchestration`                                   | `finalize_review` → canonical artifact reload → exit mapping → `emit_final_report`                                           |
+| Reduction/report | `pre_pr_verify.orchestration`                                   | `finalize_review` → canonical artifact reload → exit mapping → `persist_final_report` / `emit_final_report`                  |
 
 Supporting semantic types include `EvidenceReferenceKind`, `FindingCategory`, `FindingSeverity`, `FindingState`,
 `RequirementComparison`, `RequirementRelation`, `SemanticAxis`, `SemanticAxisAssessment`, `SemanticFinding`,
@@ -534,11 +534,16 @@ finalized = finalize_review(
 )
 artifact = finalized.artifact
 exit_code = finalized.exit_code
-# Optional subprocess/tool stdout transport; this is not human-session completion.
-emit_final_report(finalized)
-# In a human-attached Codex session, transport finalized.report verbatim as the
-# actual user-visible assistant final response before ending the review.
-# END REVIEW only after that canonical report handoff succeeds.
+# Human-attached session: persist and verify the canonical report outside the
+# target repository, then surface only this compact receipt:
+handoff = persist_final_report(
+    finalized,
+    author_repository=TARGET_REPOSITORY_ROOT,
+)
+# PrePR Verify verdict: {artifact.verdict.value}
+# Canonical report: {handoff.path}
+# END REVIEW only after this handoff succeeds and its location is surfaced.
+# Explicit stdout/headless callers may use emit_final_report(finalized).
 ```
 
 The helper uses the same externally established version/build inputs for both
@@ -550,27 +555,36 @@ Current `ReviewArtifact` is
 assessment; loading recomputes them. Frozen `1.0.0` artifacts remain readable
 without those summaries.
 
-### 8. Emit the canonical report
+### 8. Persist and hand off the canonical report
 
-`emit_final_report(finalized)` writes `finalized.report` exactly to stdout by
-default and may remain the subprocess/tool stdout transport. It is not the
-human-attached session's completion boundary: stdout success alone is not
-review completion. An optional recovery copy may be written to a
-verifier-owned temporary file before this write, but
-`emit_final_report(finalized, stream=file)` plus a printed path is not
-canonical completion.
+`persist_final_report(finalized, author_repository=...)` writes the exact
+UTF-8 bytes of `finalized.report` once to `final-report.md` inside a fresh,
+private, verifier-owned temporary directory outside the author repository. It
+closes and reloads the file, then verifies byte-for-byte equality, byte length,
+and SHA-256 before returning its path and validation metadata. Successful
+handoff intentionally leaves the ephemeral file readable; system temporary
+cleanup may remove it later. A failed handoff may likewise leave private
+temporary residue: V1 performs no raceable destructive pathname cleanup on
+failure. Such residue is not a completed handoff, and no report path is
+surfaced when persistence fails. OS cleanup may remove successful or failed
+residue later; there is no retention SLA, artifact history, registry,
+retention service, or GC contract.
 
-After canonical finalization, the Skill/model must transport the exact
-verbatim `finalized.report` into the actual assistant final response shown to
-the user. The user-visible final assistant message itself must contain that
-canonical report beginning with `# PrePR Verify Report`; it must not add a
-wrapper or replace the report with handwritten verdict prose. The model is
-only a transport layer, not a renderer: do not rebuild, reopen, inspect, or
-manually reconstruct the report, and do not summarize, rewrite, shorten, or
-reinterpret it. Do not end with `report emitted above`, `canonical report
-above`, `review complete`, a path-only message, a summary-only message, or an
-equivalent completion message. `END REVIEW` occurs only after this
-user-visible canonical report handoff succeeds.
+The human-attached Skill flow surfaces only a compact receipt containing the
+canonical verdict and `handoff.path`. Do not reproduce, reconstruct, or
+summarize the Markdown report body inline. Do not include the SHA-256 in the
+ordinary receipt. `END REVIEW` occurs only after exact file verification
+succeeds and the report location is surfaced.
+
+`emit_final_report(finalized)` remains available for explicit stdout/headless
+transport. It writes `finalized.report` exactly to stdout and does not change
+the human-session file boundary. Do not dump the full report to stdout merely
+so a model can copy it.
+
+If report persistence or presentation fails after verification, do not rerun
+execution. Retain or reload only the original authorization-scoped evidence;
+handoff may be retried from already-loaded canonical review inputs without a
+retry state machine or implicit repository-command authority.
 
 Record `artifact.verdict` and `finalized.exit_code` before presenting the
 report. A debug, semantic-construction, or reporting failure cannot authorize

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import io
+import os
+import stat
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -176,6 +180,46 @@ def persisted_path(base_path, authorization, changeset):
         base_path,
         authorization,
         changeset.repository_root,
+    )
+
+
+@pytest.fixture
+def finalized_review(repository: Path, tmp_path: Path):
+    resolved, changeset, discovery = review_inputs(repository)
+    setup = ready_setup(resolved)
+    plan = plan_for(changeset, discovery)
+    authorization = authorize(setup, changeset, discovery, plan)
+    evidence = orchestration.execute_authorized_plan(
+        setup,
+        changeset,
+        discovery,
+        plan,
+        capability(),
+        authorization,
+        evidence_path=tmp_path / "evidence.json",
+    )
+    assessment = build_semantic_assessment(
+        changeset,
+        discovery,
+        plan,
+        evidence,
+        axes=tuple(
+            SemanticAxisAssessment(
+                axis=axis,
+                status=SemanticStatus.PASS,
+                rationale=f"Reviewed {axis.value} for this report handoff fixture.",
+            )
+            for axis in SemanticAxis
+        ),
+    )
+    return repository, orchestration.finalize_review(
+        changeset,
+        discovery,
+        plan,
+        evidence,
+        assessment,
+        verifier_version="0.1.8",
+        verifier_commit_or_build="report-handoff-fixture",
     )
 
 
@@ -667,6 +711,585 @@ def test_finalization_reloads_semantics_and_returns_canonical_report(
     assert result.report.startswith("# PrePR Verify Report")
     assert "## Semantic Review" in result.report
     assert "### Spec — **PASS**" in result.report
+
+
+def test_persist_final_report_round_trips_exact_bytes_and_preserves_review(
+    finalized_review, repository: Path
+) -> None:
+    finalized = replace(
+        finalized_review[1],
+        report=finalized_review[1].report + "\nUTF-8: 測試 ✓\n",
+    )
+    report_before = finalized.report
+    artifact_before = finalized.artifact.model_dump_json()
+    exit_code_before = finalized.exit_code
+    expected = report_before.encode("utf-8")
+
+    handoff = orchestration.persist_final_report(
+        finalized,
+        author_repository=repository,
+    )
+
+    assert handoff.path.name == "final-report.md"
+    assert handoff.path.is_file()
+    assert handoff.path.read_bytes() == expected
+    assert handoff.utf8_byte_length == len(expected)
+    assert handoff.sha256 == hashlib.sha256(expected).hexdigest()
+    assert not handoff.path.resolve().is_relative_to(repository.resolve())
+    assert finalized.report == report_before
+    assert finalized.artifact.model_dump_json() == artifact_before
+    assert finalized.exit_code == exit_code_before
+    if os.name == "posix":
+        assert stat.S_IMODE(handoff.path.parent.stat().st_mode) == 0o700
+        assert stat.S_IMODE(handoff.path.stat().st_mode) == 0o600
+
+
+def test_persist_final_report_uses_exclusive_private_creation(
+    finalized_review, repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    opened: list[tuple[object, int, int | None]] = []
+    real_open = orchestration.os.open
+
+    def capture_open(path, flags, *args, **kwargs):
+        opened.append((path, flags, kwargs.get("dir_fd")))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(orchestration.os, "open", capture_open)
+    handoff = orchestration.persist_final_report(
+        finalized,
+        author_repository=repository,
+    )
+
+    creation_flags = next(flags for path, flags, _ in opened if flags & os.O_CREAT)
+    assert creation_flags & os.O_WRONLY
+    assert creation_flags & os.O_CREAT
+    assert creation_flags & os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        assert creation_flags & os.O_NOFOLLOW
+    assert handoff.path.is_file()
+
+
+@pytest.mark.skipif(
+    os.open not in os.supports_dir_fd or not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"),
+    reason="secure descriptor-relative directory walking is unavailable",
+)
+def test_persist_final_report_rejects_intermediate_temp_root_symlink_swap(
+    finalized_review, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    temp_parent = tmp_path / "temp-parent"
+    temp_root = temp_parent / "temp-root"
+    temp_root.mkdir(parents=True, mode=0o700)
+    moved_parent = tmp_path / "temp-parent-moved"
+    (repository / "temp-root").mkdir(mode=0o700)
+    monkeypatch.setattr(orchestration.tempfile, "gettempdir", lambda: str(temp_root))
+    monkeypatch.setattr(
+        orchestration.tempfile,
+        "mkdtemp",
+        lambda **_: pytest.fail("path-based mkdtemp must not anchor the temp root"),
+    )
+    real_open = orchestration.os.open
+    swapped = False
+
+    def swap_parent_before_anchor(path, flags, *args, **kwargs):
+        nonlocal swapped
+        if (
+            not swapped
+            and kwargs.get("dir_fd") is not None
+            and path == os.fsencode(temp_parent.name)
+        ):
+            swapped = True
+            temp_parent.rename(moved_parent)
+            temp_parent.symlink_to(repository, target_is_directory=True)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(orchestration.os, "open", swap_parent_before_anchor)
+    with pytest.raises(orchestration.FinalReportHandoffError):
+        orchestration.persist_final_report(finalized, author_repository=repository)
+
+    assert swapped
+    assert temp_parent.is_symlink()
+    assert not (repository / "temp-root" / "final-report.md").exists()
+
+
+@pytest.mark.skipif(
+    os.open not in os.supports_dir_fd
+    or os.stat not in os.supports_dir_fd
+    or not hasattr(os, "O_DIRECTORY"),
+    reason="descriptor-relative directory operations are unavailable",
+)
+def test_persist_final_report_anchors_creation_and_read_to_directory_fd(
+    finalized_review, repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    opened: list[tuple[object, int, int | None, int]] = []
+    created: list[tuple[object, int, int | None]] = []
+    real_open = orchestration.os.open
+    real_mkdir = orchestration.os.mkdir
+
+    def capture_open(path, flags, *args, **kwargs):
+        descriptor = real_open(path, flags, *args, **kwargs)
+        opened.append((path, flags, kwargs.get("dir_fd"), descriptor))
+        return descriptor
+
+    def capture_mkdir(path, mode, *args, **kwargs):
+        created.append((path, mode, kwargs.get("dir_fd")))
+        return real_mkdir(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(orchestration.os, "open", capture_open)
+    monkeypatch.setattr(orchestration.os, "mkdir", capture_mkdir)
+    handoff = orchestration.persist_final_report(
+        finalized,
+        author_repository=repository,
+    )
+
+    assert len(created) == 1
+    directory_name, directory_mode, temp_root_fd = created[0]
+    assert directory_mode == 0o700
+    assert temp_root_fd is not None
+    directory_open = next(
+        item
+        for item in opened
+        if item[0] == directory_name and item[2] == temp_root_fd
+    )
+    directory_fd = directory_open[3]
+    assert directory_open[1] & os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        assert directory_open[1] & os.O_NOFOLLOW
+
+    report_opens = [item for item in opened if item[0] == b"final-report.md"]
+    assert len(report_opens) == 2
+    assert all(item[2] == directory_fd for item in report_opens)
+    assert handoff.path.read_bytes() == finalized.report.encode("utf-8")
+
+
+def _prepared_temp_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    directory = tmp_path / "prepared-report-root"
+    directory.mkdir(mode=0o700)
+    monkeypatch.setattr(
+        orchestration.tempfile,
+        "gettempdir",
+        lambda **_: str(directory),
+    )
+    return directory
+
+
+def test_persist_final_report_does_not_overwrite_preexisting_target(
+    finalized_review, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    temp_root = _prepared_temp_root(tmp_path, monkeypatch)
+    original = b"pre-existing report"
+    created: list[str] = []
+    real_mkdir = orchestration.os.mkdir
+    real_open = orchestration.os.open
+
+    def capture_mkdir(path, mode, *args, **kwargs):
+        created.append(path)
+        return real_mkdir(path, mode, *args, **kwargs)
+
+    planted = False
+
+    def plant_target(path, flags, *args, **kwargs):
+        nonlocal planted
+        if not planted and path == b"final-report.md" and created:
+            target = temp_root / created[0] / "final-report.md"
+            target.write_bytes(original)
+            planted = True
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(orchestration.os, "mkdir", capture_mkdir)
+    monkeypatch.setattr(orchestration.os, "open", plant_target)
+
+    with pytest.raises(orchestration.FinalReportHandoffError):
+        orchestration.persist_final_report(finalized, author_repository=repository)
+
+    assert planted
+    target = temp_root / created[0] / "final-report.md"
+    assert target.read_bytes() == original
+    assert target.parent.exists()
+
+
+@pytest.mark.skipif(
+    os.open not in os.supports_dir_fd
+    or os.stat not in os.supports_dir_fd
+    or not hasattr(os, "O_DIRECTORY"),
+    reason="descriptor-relative directory operations are unavailable",
+)
+def test_persist_final_report_parent_path_swap_cannot_redirect_creation(
+    finalized_review, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    temp_root = _prepared_temp_root(tmp_path, monkeypatch)
+    initial_status = git(repository, "status", "--short")
+    initial_head = git(repository, "rev-parse", "HEAD")
+    created: list[str] = []
+    real_mkdir = orchestration.os.mkdir
+    swapped = False
+    real_open = orchestration.os.open
+
+    def capture_mkdir(path, mode, *args, **kwargs):
+        created.append(path)
+        return real_mkdir(path, mode, *args, **kwargs)
+
+    def swap_parent_before_report_open(path, flags, *args, **kwargs):
+        nonlocal swapped
+        if not swapped and path == b"final-report.md" and created:
+            swapped = True
+            directory = temp_root / created[0]
+            moved_directory = tmp_path / "moved-report-directory"
+            directory.rename(moved_directory)
+            directory.symlink_to(repository, target_is_directory=True)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(orchestration.os, "mkdir", capture_mkdir)
+    monkeypatch.setattr(orchestration.os, "open", swap_parent_before_report_open)
+    with pytest.raises(
+        orchestration.FinalReportHandoffError,
+        match="temporary directory path changed",
+    ):
+        orchestration.persist_final_report(
+            finalized,
+            author_repository=repository,
+        )
+
+    assert swapped
+    assert (temp_root / created[0]).is_symlink()
+    assert not (repository / "final-report.md").exists()
+    assert (
+        tmp_path / "moved-report-directory" / "final-report.md"
+    ).read_bytes() == finalized.report.encode("utf-8")
+    assert git(repository, "status", "--short") == initial_status
+    assert git(repository, "rev-parse", "HEAD") == initial_head
+
+
+def test_persist_final_report_leaves_private_residue_after_post_create_fstat_failure(
+    finalized_review, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    temp_root = _prepared_temp_root(tmp_path, monkeypatch)
+    created: list[str] = []
+    real_mkdir = orchestration.os.mkdir
+    real_fstat = orchestration.os.fstat
+    calls = 0
+    cleanup_calls: list[str] = []
+
+    def capture_mkdir(path, mode, *args, **kwargs):
+        created.append(path)
+        return real_mkdir(path, mode, *args, **kwargs)
+
+    def fail_report_fstat(descriptor: int):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("injected report fstat failure")
+        return real_fstat(descriptor)
+
+    def forbidden_cleanup(*_args, **_kwargs):
+        cleanup_calls.append("cleanup")
+        raise AssertionError("failure cleanup must not mutate a pathname")
+
+    monkeypatch.setattr(orchestration.os, "mkdir", capture_mkdir)
+    monkeypatch.setattr(orchestration.os, "fstat", fail_report_fstat)
+    monkeypatch.setattr(orchestration.os, "unlink", forbidden_cleanup)
+    monkeypatch.setattr(orchestration.os, "rmdir", forbidden_cleanup)
+    with pytest.raises(orchestration.FinalReportHandoffError):
+        orchestration.persist_final_report(
+            finalized,
+            author_repository=repository,
+        )
+
+    assert calls == 2
+    assert len(created) == 1
+    residue = temp_root / created[0]
+    assert residue.is_dir()
+    assert (residue / "final-report.md").read_bytes() == b""
+    assert cleanup_calls == []
+
+
+def test_persist_final_report_wraps_utf8_encoding_failure(
+    repository: Path,
+) -> None:
+    finalized = orchestration.FinalizedReview(
+        artifact=object(),
+        exit_code=0,
+        report="\ud800",
+    )
+
+    with pytest.raises(orchestration.FinalReportHandoffError) as failure:
+        orchestration.persist_final_report(
+            finalized,
+            author_repository=repository,
+        )
+
+    assert isinstance(failure.value.__cause__, UnicodeEncodeError)
+    assert finalized.report == "\ud800"
+
+
+def test_persist_final_report_rejects_temporary_directory_inside_repository(
+    finalized_review, repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    directory = repository / ".report-root"
+    directory.mkdir(mode=0o700)
+    monkeypatch.setattr(orchestration.tempfile, "gettempdir", lambda: str(directory))
+
+    with pytest.raises(
+        orchestration.FinalReportHandoffError,
+        match="inside the author repository",
+    ):
+        orchestration.persist_final_report(finalized, author_repository=repository)
+
+    assert not (directory / "final-report.md").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="hardlink and symlink fixture is POSIX-only")
+def test_persist_final_report_cannot_mutate_hardlink_or_follow_symlink(
+    finalized_review, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    protected = repository / "protected.txt"
+    original = b"author inode must remain unchanged"
+    protected.write_bytes(original)
+
+    for target_kind in ("hardlink", "symlink"):
+        directory = tmp_path / f"{target_kind}-root"
+        directory.mkdir(mode=0o700)
+        created: list[str] = []
+        planted = False
+        real_mkdir = orchestration.os.mkdir
+        real_open = orchestration.os.open
+
+        def capture_mkdir(path, mode, *args, **kwargs):
+            created.append(path)
+            return real_mkdir(path, mode, *args, **kwargs)
+
+        def plant_target(path, flags, *args, **kwargs):
+            nonlocal planted
+            if not planted and path == b"final-report.md" and created:
+                target = directory / created[0] / "final-report.md"
+                if target_kind == "hardlink":
+                    os.link(protected, target)
+                else:
+                    target.symlink_to(protected)
+                planted = True
+            return real_open(path, flags, *args, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(orchestration.tempfile, "gettempdir", lambda: str(directory))
+            patch.setattr(orchestration.os, "mkdir", capture_mkdir)
+            patch.setattr(orchestration.os, "open", plant_target)
+            with pytest.raises(orchestration.FinalReportHandoffError):
+                orchestration.persist_final_report(finalized, author_repository=repository)
+
+        assert planted
+        target = directory / created[0] / "final-report.md"
+        assert protected.read_bytes() == original
+        assert target.is_symlink() if target_kind == "symlink" else target.read_bytes() == original
+
+
+def test_persist_final_report_failure_does_not_delete_replacement_directory(
+    finalized_review, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    temp_root = _prepared_temp_root(tmp_path, monkeypatch)
+    created: list[str] = []
+    real_mkdir = orchestration.os.mkdir
+
+    def capture_mkdir(path, mode, *args, **kwargs):
+        if kwargs.get("dir_fd") is not None:
+            created.append(path)
+        return real_mkdir(path, mode, *args, **kwargs)
+
+    def swap_directory_then_fail(_descriptor: int) -> None:
+        directory = temp_root / created[0]
+        moved_directory = tmp_path / "moved-report-directory"
+        directory.rename(moved_directory)
+        directory.mkdir(mode=0o700)
+        raise OSError("injected report persistence failure")
+
+    cleanup_calls: list[str] = []
+
+    def forbidden_cleanup(*_args, **_kwargs):
+        cleanup_calls.append("cleanup")
+        raise AssertionError("failure cleanup must not mutate a pathname")
+
+    monkeypatch.setattr(orchestration.os, "mkdir", capture_mkdir)
+    monkeypatch.setattr(orchestration.os, "fsync", swap_directory_then_fail)
+    monkeypatch.setattr(orchestration.os, "unlink", forbidden_cleanup)
+    monkeypatch.setattr(orchestration.os, "rmdir", forbidden_cleanup)
+
+    with pytest.raises(orchestration.FinalReportHandoffError):
+        orchestration.persist_final_report(finalized, author_repository=repository)
+
+    assert len(created) == 1
+    assert (temp_root / created[0]).is_dir()
+    assert (tmp_path / "moved-report-directory" / "final-report.md").read_bytes() == finalized.report.encode("utf-8")
+    assert cleanup_calls == []
+
+
+def test_persist_final_report_failure_does_not_delete_replacement_report_file(
+    finalized_review, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    temp_root = _prepared_temp_root(tmp_path, monkeypatch)
+    created: list[str] = []
+    real_mkdir = orchestration.os.mkdir
+
+    def capture_mkdir(path, mode, *args, **kwargs):
+        if kwargs.get("dir_fd") is not None:
+            created.append(path)
+        return real_mkdir(path, mode, *args, **kwargs)
+
+    def replace_report_then_fail(_descriptor: int) -> None:
+        directory = temp_root / created[0]
+        report = directory / "final-report.md"
+        moved_report = tmp_path / "moved-report.md"
+        report.rename(moved_report)
+        report.write_bytes(b"replacement report")
+        raise OSError("injected report persistence failure")
+
+    cleanup_calls: list[str] = []
+
+    def forbidden_cleanup(*_args, **_kwargs):
+        cleanup_calls.append("cleanup")
+        raise AssertionError("failure cleanup must not mutate a pathname")
+
+    monkeypatch.setattr(orchestration.os, "mkdir", capture_mkdir)
+    monkeypatch.setattr(orchestration.os, "fsync", replace_report_then_fail)
+    monkeypatch.setattr(orchestration.os, "unlink", forbidden_cleanup)
+    monkeypatch.setattr(orchestration.os, "rmdir", forbidden_cleanup)
+
+    with pytest.raises(orchestration.FinalReportHandoffError):
+        orchestration.persist_final_report(finalized, author_repository=repository)
+
+    assert len(created) == 1
+    assert (temp_root / created[0] / "final-report.md").read_bytes() == b"replacement report"
+    assert (tmp_path / "moved-report.md").read_bytes() == finalized.report.encode("utf-8")
+    assert cleanup_calls == []
+
+
+def test_persist_final_report_retries_directory_name_collision(
+    finalized_review, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    temp_root = _prepared_temp_root(tmp_path, monkeypatch)
+    collision = temp_root / "pre-pr-verify-report-collision"
+    collision.mkdir(mode=0o700)
+    tokens = iter(("collision", "unique"))
+    monkeypatch.setattr(orchestration.secrets, "token_hex", lambda _size: next(tokens))
+
+    handoff = orchestration.persist_final_report(finalized, author_repository=repository)
+
+    assert handoff.path.parent.name == "pre-pr-verify-report-unique"
+    assert collision.exists()
+
+
+def test_persist_final_report_preserves_original_failure_without_cleanup(
+    finalized_review, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    _prepared_temp_root(tmp_path, monkeypatch)
+
+    def fail_fsync(_descriptor: int) -> None:
+        raise OSError("original persistence failure")
+
+    cleanup_calls: list[str] = []
+
+    def forbidden_cleanup(*_args, **_kwargs) -> None:
+        cleanup_calls.append("cleanup")
+        raise AssertionError("failure cleanup must not mutate a pathname")
+
+    monkeypatch.setattr(orchestration.os, "fsync", fail_fsync)
+    monkeypatch.setattr(orchestration.os, "unlink", forbidden_cleanup)
+    monkeypatch.setattr(orchestration.os, "rmdir", forbidden_cleanup)
+
+    with pytest.raises(orchestration.FinalReportHandoffError) as failure:
+        orchestration.persist_final_report(finalized, author_repository=repository)
+
+    assert isinstance(failure.value.__cause__, OSError)
+    assert str(failure.value.__cause__) == "original persistence failure"
+    assert cleanup_calls == []
+
+
+@pytest.mark.parametrize("fail_during_write", [False, True])
+def test_persist_final_report_closes_all_descriptors(
+    finalized_review,
+    repository: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fail_during_write: bool,
+) -> None:
+    finalized = finalized_review[1]
+    _prepared_temp_root(tmp_path, monkeypatch)
+    opened: list[int] = []
+    real_open = orchestration.os.open
+
+    def capture_open(path, flags, *args, **kwargs):
+        descriptor = real_open(path, flags, *args, **kwargs)
+        opened.append(descriptor)
+        return descriptor
+
+    monkeypatch.setattr(orchestration.os, "open", capture_open)
+    if fail_during_write:
+        monkeypatch.setattr(
+            orchestration.os,
+            "fsync",
+            lambda _fd: (_ for _ in ()).throw(OSError("injected")),
+        )
+
+    if fail_during_write:
+        with pytest.raises(orchestration.FinalReportHandoffError):
+            orchestration.persist_final_report(finalized, author_repository=repository)
+    else:
+        orchestration.persist_final_report(finalized, author_repository=repository)
+
+    assert opened
+    for descriptor in opened:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
+def test_persist_final_report_failure_leaves_residue_and_never_reexecutes(
+    finalized_review, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finalized = finalized_review[1]
+    temp_root = _prepared_temp_root(tmp_path, monkeypatch)
+    created: list[str] = []
+    real_mkdir = orchestration.os.mkdir
+
+    def capture_mkdir(path, mode, *args, **kwargs):
+        created.append(path)
+        return real_mkdir(path, mode, *args, **kwargs)
+
+    def fail_fsync(_descriptor: int) -> None:
+        raise OSError("injected report persistence failure")
+
+    cleanup_calls: list[str] = []
+
+    def forbidden_cleanup(*_args, **_kwargs):
+        cleanup_calls.append("cleanup")
+        raise AssertionError("failure cleanup must not mutate a pathname")
+
+    monkeypatch.setattr(orchestration.os, "mkdir", capture_mkdir)
+    monkeypatch.setattr(orchestration.os, "fsync", fail_fsync)
+    monkeypatch.setattr(orchestration.os, "unlink", forbidden_cleanup)
+    monkeypatch.setattr(orchestration.os, "rmdir", forbidden_cleanup)
+    monkeypatch.setattr(
+        orchestration,
+        "execute_verification_plan",
+        lambda *args, **kwargs: pytest.fail("report handoff must not re-execute verification"),
+    )
+
+    with pytest.raises(orchestration.FinalReportHandoffError):
+        orchestration.persist_final_report(finalized, author_repository=repository)
+
+    assert created
+    assert (temp_root / created[0] / "final-report.md").read_bytes() == finalized.report.encode("utf-8")
+    assert cleanup_calls == []
 
 
 def test_canonical_full_review_lifecycle_is_deterministic(
