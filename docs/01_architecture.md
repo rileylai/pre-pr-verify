@@ -33,7 +33,9 @@ versioned `ReviewArtifact` binds the exact ChangeSet, DiscoveryResult,
 VerificationPlan, VerificationEvidence, and SemanticAssessment identities and
 records verifier version/build identity. It carries bounded per-axis semantic
 summaries plus the already-bounded semantic findings, never source files, specs,
-or command output.
+or command output. The human Markdown projection may use those identity-matching
+bound upstream artifacts to resolve readable source, path, check, and execution
+labels, but it does not print their opaque identities.
 
 The deterministic core owns:
 
@@ -43,7 +45,7 @@ The deterministic core owns:
 - evidence reference integrity;
 - schema and cross-field validation;
 - axis and final-verdict reduction;
-- report rendering from the canonical artifact.
+- human-report rendering from the canonical artifact and its bound upstream labels.
 
 The deterministic core can be tested and reused independently of a live model. Schema validation proves contract consistency, not the truth of semantic reasoning.
 

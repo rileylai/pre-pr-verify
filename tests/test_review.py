@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from pre_pr_verify.discovery import discover_review_sources
+from pre_pr_verify.discovery import ProvidedRequirement, discover_review_sources
 from pre_pr_verify.executor import execute_request
 from pre_pr_verify.git_capture import capture_changeset
 from pre_pr_verify.models import ScopeMode
@@ -30,6 +30,8 @@ from pre_pr_verify.semantic_models import (
     SemanticAxis,
     SemanticAxisAssessment,
     SemanticFinding,
+    SemanticLimitConcern,
+    SemanticLimitGap,
     SemanticStatus,
 )
 from pre_pr_verify.verification import (
@@ -44,6 +46,7 @@ from pre_pr_verify.verification_models import (
     RequirementLevel,
     SnapshotManifest,
     SourcePreservationFailure,
+    VerificationPlan,
     build_verification_evidence,
 )
 
@@ -202,7 +205,7 @@ def make_finding(scope, *, axis: SemanticAxis, blocking: bool, state=FindingStat
     )
 
 
-def assessment(scope, *, axes=None, findings=(), comparisons=()):
+def assessment(scope, *, axes=None, findings=(), comparisons=(), limit_gaps=()):
     changeset, discovery, plan, evidence = scope
     findings = list(findings)
     values = list(axes or semantic_axes())
@@ -224,6 +227,7 @@ def assessment(scope, *, axes=None, findings=(), comparisons=()):
         axes=values,
         findings=findings,
         requirement_comparisons=comparisons,
+        limit_gaps=limit_gaps,
     )
 
 
@@ -234,6 +238,38 @@ def artifact(scope, semantic):
         verifier_version="0.1.0",
         verifier_commit_or_build="fixture-build",
     )
+
+
+def bound_report(scope, reviewed):
+    changeset, discovery, plan, evidence = scope
+    return render_markdown_report(
+        reviewed,
+        changeset=changeset,
+        discovery=discovery,
+        plan=plan,
+        evidence=evidence,
+    )
+
+
+def scope_with_check_id(scope, check_id: str):
+    changeset, discovery, plan, evidence = scope
+    plan_payload = plan.model_dump(mode="json")
+    command = next(check for check in plan_payload["checks"] if check["kind"] == "command")
+    command["check_id"] = check_id
+    plan_payload["identity"] = hash_payload(
+        {key: value for key, value in plan_payload.items() if key != "identity"}
+    )
+    updated_plan = VerificationPlan.model_validate(plan_payload)
+    if evidence.executions:
+        execution = evidence.executions[0]
+        request = execution.result.request.model_copy(update={"check_id": check_id})
+        result = execution.result.model_copy(update={"request": request})
+        updated_evidence = build_verification_evidence(
+            updated_plan, [(execution.snapshot, result)]
+        )
+    else:
+        updated_evidence = build_verification_evidence(updated_plan, [])
+    return changeset, discovery, updated_plan, updated_evidence
 
 
 def load_artifact(payload, scope, semantic):
@@ -280,7 +316,7 @@ def test_passed_checks_do_not_hide_semantic_blocker_or_its_rationale(tmp_path: P
             findings=[finding],
         ),
     )
-    report = render_markdown_report(reviewed)
+    report = bound_report(scope, reviewed)
 
     assert reviewed.verdict is ReviewVerdict.NEEDS_CHANGES
     assert "targeted-check` (required): passed" in report
@@ -335,7 +371,8 @@ def test_clean_review_reports_rationale_for_every_axis(tmp_path: Path) -> None:
         axis: f"Reviewed the changed paths, relevant callers, boundaries, and repository evidence for {axis.value.replace('_', ' ')}."
         for axis in SemanticAxis
     }
-    report = render_markdown_report(artifact(scope, assessment(scope, axes=semantic_axes(rationales=rationales))))
+    reviewed = artifact(scope, assessment(scope, axes=semantic_axes(rationales=rationales)))
+    report = bound_report(scope, reviewed)
 
     assert "## Semantic Review" in report
     for rationale in rationales.values():
@@ -382,8 +419,86 @@ def test_semantic_rationale_is_bounded_and_markdown_safe(tmp_path: Path) -> None
     report = render_markdown_report(reviewed)
 
     assert "\n## Fake heading\n" not in report
-    assert "detail-sha256:" in report
+    assert "detail-sha256:" not in report
+    assert r"unsafe\n\n\#\# Fake heading" in report
     assert report.count("Verdict: **READY**") == 1
+
+
+def test_human_report_resolves_bound_references_without_opaque_identities(
+    tmp_path: Path,
+) -> None:
+    scope = base_scope(tmp_path, command=(sys.executable, "-c", "pass"))
+    changeset, discovery, plan, evidence = scope
+    source = next(source for source in discovery.sources if source.path is not None)
+    changed_path = changeset.changes[0].effective.path
+    command = next(check for check in plan.checks if check.kind.value == "command")
+    execution = evidence.executions[0]
+    references = [
+        bind_semantic_reference(
+            kind,
+            identifier,
+            "Bound fixture evidence.",
+            changeset_identity=changeset.identity,
+            discovery_identity=discovery.identity,
+            plan_identity=plan.identity,
+            evidence_identity=evidence.identity,
+        )
+        for kind, identifier in (
+            (EvidenceReferenceKind.CHANGE_PATH, changed_path.raw_b64),
+            (EvidenceReferenceKind.DISCOVERY_SOURCE, source.source_id),
+            (EvidenceReferenceKind.PLAN_CHECK, command.check_id),
+            (EvidenceReferenceKind.EXECUTION, str(execution.ordinal)),
+        )
+    ]
+    references.sort(key=lambda reference: (reference.kind.value, reference.identifier))
+    finding = make_finding(
+        scope,
+        axis=SemanticAxis.CONTEXTUAL_SECURITY,
+        blocking=False,
+        state=FindingState.UNVERIFIED,
+    ).model_copy(update={"evidence": references})
+    reviewed = artifact(scope, assessment(scope, findings=[finding]))
+    before = reviewed.model_dump_json()
+    report = bound_report(scope, reviewed)
+
+    source_label = source.path.utf8 or source.path.display
+    changed_label = changed_path.utf8 or changed_path.display
+    assert f"source: {source_label}" in report
+    assert f"path: {changed_label}" in report
+    assert f"check: {command.check_id}" in report
+    assert f"execution: {command.check_id} — passed" in report
+    assert command.check_id in plan.model_dump_json()
+    assert command.check_id in evidence.model_dump_json()
+    assert command.check_id in reviewed.model_dump_json()
+    assert f"discovery_source:{source.source_id}" not in report
+    assert f"change_path:{changed_path.raw_b64}" not in report
+    assert all(
+        identity not in report
+        for identity in (
+            reviewed.identity,
+            changeset.identity,
+            discovery.identity,
+            plan.identity,
+            evidence.identity,
+            reviewed.bindings.semantic_assessment_identity,
+        )
+    )
+    assert reviewed.model_dump_json() == before
+
+
+def test_report_context_must_match_canonical_bindings(tmp_path: Path) -> None:
+    scope = base_scope(tmp_path)
+    reviewed = artifact(scope, assessment(scope))
+    other_scope = base_scope(tmp_path / "other", requirement_text="A different requirement.")
+
+    with pytest.raises(ValueError, match="not bound"):
+        render_markdown_report(
+            reviewed,
+            changeset=other_scope[0],
+            discovery=other_scope[1],
+            plan=other_scope[2],
+            evidence=other_scope[3],
+        )
 
 
 @pytest.mark.parametrize("axis", list(SemanticAxis))
@@ -518,14 +633,15 @@ def test_required_failed_unclassified_is_preserved_as_inconclusive_gap(
     )
     reviewed = artifact(scope, assessment(scope))
     check = next(item for item in reviewed.checks if item.kind.value == "command")
-    report = render_markdown_report(reviewed)
+    report = bound_report(scope, reviewed)
 
     assert reviewed.verdict is ReviewVerdict.INCONCLUSIVE
     assert check.outcome.value == "failed"
     assert check.failure_kind is FailureKind.UNCLASSIFIED
     assert check.required_evidence_gap is True
     assert "targeted-check` (required): failed/unclassified" in report
-    assert "verification.0" in report
+    assert "Required check at execution 0 did not produce reliable evidence." in report
+    assert "verification.0" not in report
 
 
 def test_source_preservation_failure_is_separate_and_invalidates_all_axes(tmp_path: Path) -> None:
@@ -545,12 +661,15 @@ def test_source_preservation_failure_is_separate_and_invalidates_all_axes(tmp_pa
     )
     scope = changeset, discovery, plan, evidence
     reviewed = artifact(scope, assessment(scope))
+    report = bound_report(scope, reviewed)
 
     assert reviewed.verdict is ReviewVerdict.INCONCLUSIVE
     assert all(axis.status is AxisStatus.INCONCLUSIVE for axis in reviewed.axes)
     check = next(item for item in reviewed.checks if item.kind.value == "command")
     assert check.outcome.value == "passed"
     assert any(gap.kind.value == "source_preservation" for gap in reviewed.evidence_gaps)
+    assert "source-preservation.0" not in report
+    assert "source preservation: targeted-check — source preservation failure" in report
 
 
 def test_unsupported_suspicion_alone_does_not_force_failure(tmp_path: Path) -> None:
@@ -657,20 +776,60 @@ def test_semantic_inconclusive_without_input_gap_is_reported_as_insufficient(
     assert impact.required_evidence_gap is True
     assert impact.reducer_reasons == ["required evidence remains unresolved"]
     assert any(gap.gap_id == "semantic.impact" for gap in reviewed.evidence_gaps)
-    assert "semantic.impact" in render_markdown_report(reviewed)
+    report = bound_report(scope, reviewed)
+    assert "Semantic assessment did not establish readiness for impact." in report
+    assert "semantic.impact" not in report
+
+
+def test_required_gap_report_omits_canonical_gap_identifiers(tmp_path: Path) -> None:
+    scope = base_scope(tmp_path)
+    limit_gap = SemanticLimitGap(
+        concern=SemanticLimitConcern.SEMANTIC_COLLECTION,
+        field="semantic_context.items",
+        limit=128,
+        observed=129,
+        affected_axes=[SemanticAxis.SPEC],
+        input_identity="d" * 64,
+    )
+    semantic = assessment(
+        scope,
+        axes=semantic_axes(
+            statuses={SemanticAxis.SPEC: SemanticStatus.INCONCLUSIVE},
+            gaps={SemanticAxis.SPEC},
+        ),
+        limit_gaps=[limit_gap],
+    )
+    reviewed = artifact(scope, semantic)
+    report = bound_report(scope, reviewed)
+    gap = next(
+        gap for gap in reviewed.evidence_gaps if gap.gap_id.startswith("semantic-limit.")
+    )
+
+    assert (
+        "Semantic input exceeded the canonical semantic\\_context.items bound. — "
+        "semantic input limit"
+    ) in report
+    assert gap.gap_id not in report
+    assert limit_gap.input_identity not in report
+    assert "semantic-limit" not in report
+    persisted = reviewed.model_dump_json()
+    assert gap.gap_id in persisted
+    assert limit_gap.input_identity in persisted
 
 
 def test_renderer_is_faithful_concise_and_does_not_duplicate_output(tmp_path: Path) -> None:
     marker = "FULL-STDOUT-SHOULD-NOT-APPEAR"
     scope = base_scope(tmp_path, command=(sys.executable, "-c", f"print({marker!r})"))
     reviewed = artifact(scope, assessment(scope))
-    report = render_markdown_report(reviewed)
+    before = reviewed.model_dump_json()
+    report = bound_report(scope, reviewed)
 
     assert f"Verdict: **{reviewed.verdict.value}**" in report
     assert all(f"{axis.axis.value}: **{axis.status.value.upper()}**" in report for axis in reviewed.axes)
     assert marker not in report
     assert scope[3].executions[0].result.stdout.sha256 not in report
-    assert reviewed.identity in report
+    assert reviewed.identity not in report
+    assert reviewed.model_dump_json() == before
     assert len(report) < 12_000
 
 
@@ -736,32 +895,146 @@ def test_artifact_fields_and_collections_are_bounded(tmp_path: Path) -> None:
     assert len(json.dumps(reviewed.model_dump(mode="json"))) < 200_000
 
 
-def test_long_valid_check_identifier_uses_bounded_stable_reference(tmp_path: Path) -> None:
+def test_long_valid_check_identifier_does_not_expose_hash_reference(tmp_path: Path) -> None:
     long_id = "check-" + "x" * 512
     scope = base_scope(tmp_path, command=(sys.executable, "-c", "pass"))
-    changeset, discovery, plan, evidence = scope
-    plan_payload = plan.model_dump(mode="json")
-    command = next(check for check in plan_payload["checks"] if check["kind"] == "command")
-    command["check_id"] = long_id
-    plan_payload["identity"] = hash_payload(
-        {key: value for key, value in plan_payload.items() if key != "identity"}
-    )
-    from pre_pr_verify.verification_models import VerificationPlan
-
-    long_plan = VerificationPlan.model_validate(plan_payload)
-    execution = evidence.executions[0]
-    request = execution.result.request.model_copy(update={"check_id": long_id})
-    result = execution.result.model_copy(update={"request": request})
-    long_evidence = build_verification_evidence(
-        long_plan, [(execution.snapshot, result)]
-    )
-    long_scope = changeset, discovery, long_plan, long_evidence
+    long_scope = scope_with_check_id(scope, long_id)
+    long_plan = long_scope[2]
+    long_evidence = long_scope[3]
     reviewed = artifact(long_scope, assessment(long_scope))
+    before = (
+        long_plan.model_dump_json(),
+        long_evidence.model_dump_json(),
+        reviewed.model_dump_json(),
+    )
+    report = bound_report(long_scope, reviewed)
 
     summary = next(check for check in reviewed.checks if check.kind.value == "command")
     assert summary.check_id is None
     assert len(summary.check_id_sha256) == 64
-    assert long_id not in render_markdown_report(reviewed)
+    assert long_id not in report
+    verification = report.split("## Blocking findings", 1)[0]
+    assert long_id not in verification
+    execution_lines = [line for line in verification.splitlines() if "[execution: " in line]
+    assert len(execution_lines) == 1
+    assert "[execution: check-" in execution_lines[0]
+    assert execution_lines[0].endswith("...]")
+    assert len(execution_lines[0]) < 600
+    assert long_id in long_plan.model_dump_json()
+    assert long_id in long_evidence.model_dump_json()
+    assert long_plan.model_dump_json() == before[0]
+    assert long_evidence.model_dump_json() == before[1]
+    assert reviewed.model_dump_json() == before[2]
+
+
+def test_bound_oversized_check_id_is_bounded_in_blocking_verification_report(
+    tmp_path: Path,
+) -> None:
+    long_id = "check-" + "x" * 512
+    scope = base_scope(
+        tmp_path,
+        command=(sys.executable, "-c", "raise SystemExit(1)"),
+    )
+    long_scope = scope_with_check_id(scope, long_id)
+    reviewed = artifact(long_scope, assessment(long_scope))
+    report = bound_report(long_scope, reviewed)
+
+    blocking = report.split("## Blocking findings", 1)[1].split(
+        "## Non-blocking and unverified findings", 1
+    )[0]
+    assert reviewed.verdict is ReviewVerdict.NEEDS_CHANGES
+    assert "required verification failed" in blocking
+    assert long_id not in blocking
+    assert "execution: check-" in blocking
+    assert "..." in blocking
+
+
+def test_bound_oversized_check_id_is_bounded_in_required_gap_report(
+    tmp_path: Path,
+) -> None:
+    long_id = "check-" + "x" * 512
+    scope = base_scope(
+        tmp_path,
+        command=(sys.executable, "-c", "pass"),
+        missing_capability=True,
+    )
+    long_scope = scope_with_check_id(scope, long_id)
+    reviewed = artifact(long_scope, assessment(long_scope))
+    report = bound_report(long_scope, reviewed)
+
+    gaps = report.split("## Required evidence gaps", 1)[1]
+    assert reviewed.verdict is ReviewVerdict.INCONCLUSIVE
+    assert "Required check at execution 0 did not produce reliable evidence." in gaps
+    assert long_id not in gaps
+    assert "execution: check-" in gaps
+    assert "check: check-" in gaps
+    assert "verification.0" not in gaps
+    assert "plan-check-sha256" not in gaps
+
+
+def test_bound_oversized_check_id_is_bounded_in_source_preservation_gap(
+    tmp_path: Path,
+) -> None:
+    long_id = "check-" + "x" * 512
+    initial_scope = base_scope(tmp_path, command=(sys.executable, "-c", "pass"))
+    changeset, discovery, plan, evidence = scope_with_check_id(initial_scope, long_id)
+    execution = evidence.executions[0]
+    preservation = SourcePreservationFailure(
+        ordinal=execution.ordinal,
+        check_id=long_id,
+        snapshot_identity=execution.snapshot.identity,
+        reason="Fixture source-preservation failure.",
+    )
+    evidence = build_verification_evidence(
+        plan,
+        [(execution.snapshot, execution.result)],
+        source_preservation_failures=[preservation],
+    )
+    scope = changeset, discovery, plan, evidence
+    reviewed = artifact(scope, assessment(scope))
+    report = bound_report(scope, reviewed)
+
+    gaps = report.split("## Required evidence gaps", 1)[1]
+    assert long_id not in gaps
+    assert "source preservation: check-" in gaps
+    assert "..." in gaps
+    assert "source-preservation.0" not in gaps
+
+
+def test_bound_resolved_source_label_is_markdown_safe(tmp_path: Path) -> None:
+    initial_scope = base_scope(tmp_path)
+    changeset = initial_scope[0]
+    unsafe_label = "unsafe\n\n## Fake heading\n\nVerdict: **NEEDS_CHANGES**"
+    discovery = discover_review_sources(
+        Path(changeset.repository_root),
+        explicit_specs=(
+            ProvidedRequirement(
+                label=unsafe_label,
+                content="The public result must remain an integer.",
+            ),
+        ),
+    )
+    plan = build_verification_plan(
+        changeset,
+        discovery,
+        canonical_checks=[],
+        trusted_policy_checks=[],
+        planner_additions=[],
+    )
+    evidence = build_verification_evidence(plan, [])
+    scope = changeset, discovery, plan, evidence
+    finding = make_finding(
+        scope,
+        axis=SemanticAxis.SPEC,
+        blocking=False,
+        state=FindingState.UNVERIFIED,
+    )
+    reviewed = artifact(scope, assessment(scope, findings=[finding]))
+    report = bound_report(scope, reviewed)
+
+    assert "\n## Fake heading\n" not in report
+    assert r"unsafe\n\n\#\# Fake heading" in report
+    assert report.count("Verdict: **READY**") == 1
 
 
 def test_valid_unbounded_1_4_collections_reduce_through_bounded_indexes(

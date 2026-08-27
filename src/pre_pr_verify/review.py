@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import hashlib
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from pre_pr_verify.discovery_models import DiscoveryResult
-from pre_pr_verify.models import ChangeSet
+from pre_pr_verify.models import ChangeSet, RawPath
 from pre_pr_verify.review_models import (
     ArtifactBindings,
     AxisResult,
@@ -30,9 +31,11 @@ from pre_pr_verify.review_models import (
 )
 from pre_pr_verify.semantic import load_semantic_assessment
 from pre_pr_verify.semantic_models import (
+    EvidenceReferenceKind,
     FindingState,
     SemanticAssessment,
     SemanticAxis,
+    SemanticEvidenceReference,
     SemanticStatus,
 )
 from pre_pr_verify.verification_models import (
@@ -443,14 +446,167 @@ def verdict_exit_code(verdict: ReviewVerdict) -> int:
     }[verdict]
 
 
-def _reference_label(kind: str, identifier: str) -> str:
-    if len(identifier) > 96:
-        identifier = "sha256:" + hashlib.sha256(identifier.encode("utf-8")).hexdigest()
-    return f"{kind}:{identifier}"
+def _path_label(path: RawPath) -> str:
+    return path.utf8 if path.utf8 is not None else path.display
 
 
-def _check_label(check: VerificationCheckSummary) -> str:
-    return check.check_id or f"sha256:{check.check_id_sha256}"
+@dataclass(frozen=True)
+class _ReportReferenceResolver:
+    changed_paths: dict[str, str]
+    discovery_sources: dict[str, str]
+    plan_checks: dict[str, str]
+    plan_checks_by_sha256: dict[str, str]
+    executions: dict[str, str]
+    preservation_failures: dict[str, str]
+
+    @classmethod
+    def empty(cls) -> _ReportReferenceResolver:
+        return cls({}, {}, {}, {}, {}, {})
+
+    @classmethod
+    def from_bound_inputs(
+        cls,
+        changeset: ChangeSet,
+        discovery: DiscoveryResult,
+        plan: VerificationPlan,
+        evidence: VerificationEvidence,
+    ) -> _ReportReferenceResolver:
+        plan_checks = {check.check_id: check.check_id for check in plan.checks}
+        plan_checks_by_sha256 = {
+            hashlib.sha256(check.check_id.encode("utf-8")).hexdigest(): check.check_id
+            for check in plan.checks
+        }
+        return cls(
+            changed_paths={
+                change.effective.path.raw_b64: _path_label(change.effective.path)
+                for change in changeset.changes
+            },
+            discovery_sources={
+                source.source_id: (
+                    _path_label(source.path)
+                    if source.path is not None
+                    else source.label
+                )
+                for source in discovery.sources
+            },
+            plan_checks=plan_checks,
+            plan_checks_by_sha256=plan_checks_by_sha256,
+            executions={
+                str(execution.ordinal): (
+                    f"{execution.result.request.check_id}"
+                    f" — {execution.result.status.value}"
+                )
+                for execution in evidence.executions
+            },
+            preservation_failures={
+                str(failure.ordinal): (
+                    f"{failure.check_id} — source preservation failure"
+                )
+                for failure in evidence.source_preservation_failures
+            },
+        )
+
+    def check_label(self, check: VerificationCheckSummary) -> str:
+        if check.check_id is not None:
+            return check.check_id
+        return self.plan_checks_by_sha256.get(
+            check.check_id_sha256,
+            "unlabelled verification check",
+        )
+
+    def reference_label(self, reference: SemanticEvidenceReference) -> str:
+        identifier = reference.identifier
+        if reference.kind is EvidenceReferenceKind.CHANGE_PATH:
+            label = self.changed_paths.get(identifier)
+            return f"path: {label}" if label is not None else "changed repository path"
+        if reference.kind is EvidenceReferenceKind.DISCOVERY_SOURCE:
+            label = self.discovery_sources.get(identifier)
+            return f"source: {label}" if label is not None else "discovery source"
+        if reference.kind is EvidenceReferenceKind.PLAN_CHECK:
+            label = self.plan_checks.get(identifier)
+            return f"check: {label}" if label is not None else "verification check"
+        if reference.kind is EvidenceReferenceKind.EXECUTION:
+            label = self.executions.get(identifier)
+            return f"execution: {label}" if label is not None else "verification execution"
+        label = self.preservation_failures.get(identifier)
+        return (
+            f"source preservation: {label}"
+            if label is not None
+            else "source preservation signal"
+        )
+
+    def gap_reference_label(self, reference: str) -> str:
+        prefix, separator, identifier = reference.partition(":")
+        if not separator:
+            return "bound evidence"
+        if prefix == "execution":
+            label = self.executions.get(identifier)
+            return f"execution: {label}" if label is not None else "verification execution"
+        if prefix == "plan-check-sha256":
+            label = self.plan_checks_by_sha256.get(identifier)
+            return f"check: {label}" if label is not None else "verification check"
+        if prefix == "source-preservation":
+            label = self.preservation_failures.get(identifier)
+            return (
+                f"source preservation: {label}"
+                if label is not None
+                else "source preservation signal"
+            )
+        if prefix == "semantic-axis":
+            try:
+                return f"semantic axis: {_axis_label(SemanticAxis(identifier))}"
+            except ValueError:
+                return "semantic axis"
+        if prefix == "semantic-limit":
+            return "semantic input limit"
+        return "bound evidence"
+
+
+def _report_resolver(
+    artifact: ReviewArtifact | LegacyReviewArtifact,
+    changeset: ChangeSet | None,
+    discovery: DiscoveryResult | None,
+    plan: VerificationPlan | None,
+    evidence: VerificationEvidence | None,
+) -> _ReportReferenceResolver:
+    supplied = (changeset, discovery, plan, evidence)
+    if not any(value is not None for value in supplied):
+        return _ReportReferenceResolver.empty()
+    if not all(value is not None for value in supplied):
+        raise ValueError("report reference context must include all bound inputs")
+    assert changeset is not None
+    assert discovery is not None
+    assert plan is not None
+    assert evidence is not None
+    bindings = artifact.bindings
+    if (
+        changeset.identity != bindings.changeset_identity
+        or discovery.identity != bindings.discovery_identity
+        or plan.identity != bindings.plan_identity
+        or evidence.identity != bindings.evidence_identity
+        or evidence.plan.identity != plan.identity
+    ):
+        raise ValueError("report reference context is not bound to the ReviewArtifact")
+    return _ReportReferenceResolver.from_bound_inputs(
+        changeset,
+        discovery,
+        plan,
+        evidence,
+    )
+
+
+def _reference_label(
+    reference: SemanticEvidenceReference,
+    resolver: _ReportReferenceResolver,
+) -> str:
+    return _report_text(resolver.reference_label(reference))
+
+
+def _check_label(
+    check: VerificationCheckSummary,
+    resolver: _ReportReferenceResolver,
+) -> str:
+    return _report_text(resolver.check_label(check))
 
 
 def _axis_label(axis: SemanticAxis) -> str:
@@ -481,11 +637,20 @@ def _report_text(value: str) -> str:
     rendered = "".join(escaped)
     if len(rendered) <= 240:
         return rendered
-    return "detail-sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+    budget = 237
+    visible: list[str] = []
+    length = 0
+    for fragment in escaped:
+        if length + len(fragment) > budget:
+            break
+        visible.append(fragment)
+        length += len(fragment)
+    return "".join(visible) + "..."
 
 
 def _semantic_review_lines(
     artifact: ReviewArtifact | LegacyReviewArtifact,
+    resolver: _ReportReferenceResolver,
 ) -> list[str]:
     lines = ["## Semantic Review", ""]
     summaries = getattr(artifact, "semantic_summaries", None)
@@ -500,7 +665,7 @@ def _semantic_review_lines(
             for finding_id in axis.finding_ids:
                 finding = finding_by_id[finding_id]
                 references.extend(
-                    _reference_label(reference.kind.value, reference.identifier)
+                    _reference_label(reference, resolver)
                     for reference in finding.evidence
                 )
             references = sorted(set(references))
@@ -515,19 +680,27 @@ def _semantic_review_lines(
             else:
                 lines.append(
                     "- Evidence: no axis-specific finding; see the bound "
-                    f"SemanticAssessment `{artifact.bindings.semantic_assessment_identity}`."
+                    "SemanticAssessment in the canonical machine artifacts."
                 )
         else:
             lines.append(
-                "- Reason: this legacy ReviewArtifact does not persist semantic rationale; "
-                f"see SemanticAssessment `{artifact.bindings.semantic_assessment_identity}`."
+                "- Reason: this legacy ReviewArtifact does not persist semantic rationale."
             )
         lines.append("")
     return lines
 
 
-def render_markdown_report(artifact: ReviewArtifact | LegacyReviewArtifact) -> str:
-    """Render only canonical artifact fields; verdict reduction happens elsewhere."""
+def render_markdown_report(
+    artifact: ReviewArtifact | LegacyReviewArtifact,
+    *,
+    changeset: ChangeSet | None = None,
+    discovery: DiscoveryResult | None = None,
+    plan: VerificationPlan | None = None,
+    evidence: VerificationEvidence | None = None,
+) -> str:
+    """Render a human-readable projection without changing canonical artifacts."""
+
+    resolver = _report_resolver(artifact, changeset, discovery, plan, evidence)
 
     lines = [
         "# PrePR Verify Report",
@@ -541,20 +714,24 @@ def render_markdown_report(artifact: ReviewArtifact | LegacyReviewArtifact) -> s
         f"- {axis.axis.value}: **{axis.status.value.upper()}**"
         for axis in artifact.axes
     )
-    lines.extend(["", *_semantic_review_lines(artifact)])
+    lines.extend(["", *_semantic_review_lines(artifact, resolver)])
     lines.extend(["", "## Verification", ""])
     shown_checks = artifact.checks[:12]
     lines.extend(
-        f"- `{_check_label(check)}` ({check.requirement_level.value}): {check.outcome.value}"
+        f"- `{_check_label(check, resolver)}` ({check.requirement_level.value}): {check.outcome.value}"
         + (f"/{check.failure_kind.value}" if check.failure_kind is not None else "")
-        + (f" [{_reference_label('execution', str(check.execution_ordinal))}]" if check.execution_ordinal is not None else "")
+        + (
+            f" [execution: {_report_text(resolver.executions.get(str(check.execution_ordinal), 'verification execution'))}]"
+            if check.execution_ordinal is not None
+            else ""
+        )
         for check in shown_checks
     )
     omitted_checks = artifact.check_index.count - len(shown_checks)
     if omitted_checks:
         lines.append(
-            f"- {omitted_checks} additional checks are referenced by "
-            f"check-set `{artifact.check_index.identity}`."
+            f"- {omitted_checks} additional checks are retained in the canonical "
+            "machine artifacts."
         )
     blocking = [finding for finding in artifact.findings if finding.blocking]
     blocking_checks = [
@@ -577,7 +754,7 @@ def render_markdown_report(artifact: ReviewArtifact | LegacyReviewArtifact) -> s
             f"- `{finding.finding_id}` [{finding.axis.value}]: {_report_text(finding.title)} — "
             f"{_report_text(finding.explanation)}; "
             + ", ".join(
-                _reference_label(reference.kind.value, reference.identifier)
+                _reference_label(reference, resolver)
                 for reference in finding.evidence[:2]
             )
             + (
@@ -588,8 +765,8 @@ def render_markdown_report(artifact: ReviewArtifact | LegacyReviewArtifact) -> s
             for finding in shown_blocking
         ]
     blocking_lines.extend(
-        f"- `verification:{_check_label(check)}` [test_sufficiency]: required verification failed — "
-        f"{_reference_label('execution', str(check.execution_ordinal))}"
+        f"- `verification:{_check_label(check, resolver)}` [test_sufficiency]: required verification failed — "
+        f"execution: {_report_text(resolver.executions.get(str(check.execution_ordinal), 'verification execution'))}"
         for check in shown_blocking_checks
     )
     omitted_blocking_checks = (
@@ -598,13 +775,13 @@ def render_markdown_report(artifact: ReviewArtifact | LegacyReviewArtifact) -> s
     if omitted_blocking_checks:
         blocking_lines.append(
             f"- {omitted_blocking_checks} additional required verification failures "
-            f"are referenced by check-set `{artifact.check_index.identity}`."
+            "are retained in the canonical machine artifacts."
         )
     lines.extend(blocking_lines or ["- None."])
     if len(blocking) > len(shown_blocking):
         lines.append(
             f"- {len(blocking) - len(shown_blocking)} additional blocking findings "
-            f"are available in SemanticAssessment `{artifact.bindings.semantic_assessment_identity}`."
+            "are retained in the canonical machine artifacts."
         )
     lines.extend(["", "## Non-blocking and unverified findings", ""])
     lines.extend(
@@ -612,7 +789,7 @@ def render_markdown_report(artifact: ReviewArtifact | LegacyReviewArtifact) -> s
             f"- `{finding.finding_id}` ({finding.state.value}) [{finding.axis.value}]: {_report_text(finding.title)} — "
             f"{_report_text(finding.explanation)}; "
             + ", ".join(
-                _reference_label(reference.kind.value, reference.identifier)
+                _reference_label(reference, resolver)
                 for reference in finding.evidence[:2]
             )
             + (
@@ -627,14 +804,14 @@ def render_markdown_report(artifact: ReviewArtifact | LegacyReviewArtifact) -> s
     if len(other) > len(shown_other):
         lines.append(
             f"- {len(other) - len(shown_other)} additional non-blocking findings "
-            f"are available in SemanticAssessment `{artifact.bindings.semantic_assessment_identity}`."
+            "are retained in the canonical machine artifacts."
         )
     lines.extend(["", "## Required evidence gaps", ""])
     shown_gaps = artifact.evidence_gaps[:12]
     lines.extend(
         [
-            f"- `{gap.gap_id}`: {_report_text(gap.summary)} — "
-            f"{', '.join(_reference_label('gap', reference) for reference in gap.references[:2])}"
+            f"- {_report_text(gap.summary)} — "
+            f"{', '.join(_report_text(resolver.gap_reference_label(reference)) for reference in gap.references[:2])}"
             for gap in shown_gaps
         ]
         or ["- None."]
@@ -642,20 +819,15 @@ def render_markdown_report(artifact: ReviewArtifact | LegacyReviewArtifact) -> s
     omitted_gaps = artifact.evidence_gap_index.count - len(shown_gaps)
     if omitted_gaps:
         lines.append(
-            f"- {omitted_gaps} additional required gaps are referenced by "
-            f"gap-set `{artifact.evidence_gap_index.identity}`."
+            f"- {omitted_gaps} additional required gaps are retained in the "
+            "canonical machine artifacts."
         )
     lines.extend(
         [
             "",
             "## Artifact references",
             "",
-            f"- ReviewArtifact: `{artifact.identity}`",
-            f"- ChangeSet: `{artifact.bindings.changeset_identity}`",
-            f"- DiscoveryResult: `{artifact.bindings.discovery_identity}`",
-            f"- VerificationPlan: `{artifact.bindings.plan_identity}`",
-            f"- VerificationEvidence: `{artifact.bindings.evidence_identity}`",
-            f"- SemanticAssessment: `{artifact.bindings.semantic_assessment_identity}`",
+            "Canonical audit identities are retained in the machine artifacts.",
             "",
         ]
     )

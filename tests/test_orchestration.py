@@ -822,11 +822,18 @@ def test_canonical_full_review_lifecycle_is_deterministic(
         "## Non-blocking and unverified findings",
         "## Required evidence gaps",
         "## Artifact references",
-        f"- ReviewArtifact: `{finalized.artifact.identity}`",
-        f"- ChangeSet: `{changeset.identity}`",
-        f"- VerificationEvidence: `{reused_evidence.identity}`",
+        "Canonical audit identities are retained in the machine artifacts.",
     ):
         assert expected in emitted.getvalue()
+    for identity in (
+        finalized.artifact.identity,
+        changeset.identity,
+        discovery.identity,
+        plan.identity,
+        reused_evidence.identity,
+        assessment.identity,
+    ):
+        assert identity not in emitted.getvalue()
     assert capture_resolved_scope(resolved).identity == changeset.identity
     assert git(repository, "status", "--short") == initial_status
     assert not (repository / "verification-evidence.json").exists()

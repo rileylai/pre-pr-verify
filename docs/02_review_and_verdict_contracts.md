@@ -164,13 +164,17 @@ every gap. Exit codes are `0` for `READY`, `1` for `NEEDS_CHANGES`, and `2` for
 ReviewArtifact lifecycle. Verdict selection is complete before rendering, so a
 renderer failure cannot alter the canonical verdict.
 
-The Markdown renderer is a projection of ReviewArtifact only. Its default form
+The Markdown renderer is a projection of ReviewArtifact using the same
+identity-matching bound ChangeSet, DiscoveryResult, VerificationPlan, and
+VerificationEvidence only to resolve human-readable labels. Its default form
 contains verdict, five axes, a per-axis Semantic Review with bounded rationale,
-a bounded check summary with complete-set
-references/counts, blocking findings (including required verification failures),
-nonblocking/unverified findings, required gaps, and concise canonical references.
-It never interprets prose or command output to choose a status.
+a bounded check summary with readable execution context, blocking findings
+(including required verification failures), nonblocking/unverified findings,
+required gaps, and concise evidence labels. It never interprets prose or
+command output to choose a status.
 Default presentation selects a small bounded number of checks, findings, gaps,
-and references, then states every omitted count and complete-set/artifact
-identity. Untrusted semantic prose is rendered as escaped one-line text (or a
-stable digest when too long), so it cannot inject Markdown report structure.
+and references, then states every omitted count without printing opaque
+artifact, source, path, or collection identities. Canonical SHA-256 identities,
+encoded paths, and evidence locators remain in the machine artifacts.
+Untrusted semantic prose is rendered as escaped one-line text and safely
+shortened when too long, so it cannot inject Markdown report structure.

@@ -466,7 +466,13 @@ def finalize_review(
     return FinalizedReview(
         artifact=artifact,
         exit_code=verdict_exit_code(artifact.verdict),
-        report=render_markdown_report(artifact),
+        report=render_markdown_report(
+            artifact,
+            changeset=changeset,
+            discovery=discovery,
+            plan=plan,
+            evidence=evidence,
+        ),
     )
 
 

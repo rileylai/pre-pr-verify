@@ -580,7 +580,11 @@ same authorization-scoped evidence target; never rerun the checks
 automatically. `EvidenceReuseError` is a fail-closed stop, not permission to
 trust or replace stale evidence.
 Source/spec/output detail remains in bound upstream artifacts; the report is
-only a concise projection.
+only a concise human-readable projection. Its renderer resolves source paths,
+changed paths, planned checks, and execution outcomes from the same
+identity-bound upstream artifacts used for finalization. It does not print
+opaque artifact SHA identities or encoded path locators; those remain in the
+canonical machine artifacts.
 
 Exit mapping is READY 0, NEEDS_CHANGES 1, INCONCLUSIVE 2, and
 preflight/`nothing_to_review` 3. Keep the author repository unchanged.

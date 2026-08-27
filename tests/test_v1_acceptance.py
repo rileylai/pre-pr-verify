@@ -245,7 +245,13 @@ def complete_review(
     assert artifact.bindings.plan_identity == plan.identity
     assert artifact.bindings.evidence_identity == evidence.identity
     assert artifact.bindings.semantic_assessment_identity == assessment.identity
-    return artifact, render_markdown_report(loaded)
+    return artifact, render_markdown_report(
+        loaded,
+        changeset=changeset,
+        discovery=discovery,
+        plan=plan,
+        evidence=evidence,
+    )
 
 
 def test_clean_valid_change_runs_complete_flow_to_ready(tmp_path: Path) -> None:
@@ -472,7 +478,11 @@ def test_source_preservation_failure_remains_separate(tmp_path: Path) -> None:
 
     assert artifact.verdict is ReviewVerdict.INCONCLUSIVE
     assert execution.result.status.value == "passed"
-    assert "source-preservation.0" in report
+    assert (
+        f"source preservation: {execution.result.request.check_id} — "
+        "source preservation failure"
+    ) in report
+    assert "source-preservation.0" not in report
 
 
 def test_unsupported_suspicion_alone_stays_ready(tmp_path: Path) -> None:
