@@ -2,7 +2,7 @@
 
 PrePR Verify is an independent, evidence-based pre-PR verification Skill for AI-assisted software development. A fresh reviewer reconstructs context from repository state instead of trusting the implementation session's claim that the work is complete.
 
-The product is a Codex Skill backed by a small deterministic Python core. The Skill owns semantic judgment and workflow orchestration. The core owns Git scope, typed artifacts, command contracts, evidence references, schema validation, and verdict invariants.
+The product is a **Codex Skill + deterministic Python core**. The Skill owns semantic judgment and workflow orchestration. The core owns Git scope, typed artifacts, command contracts, evidence references, schema validation, and verdict invariants.
 
 ## Review model
 
@@ -19,14 +19,29 @@ propagate into the axes and final verdict. The final verdict is `READY`,
 `NEEDS_CHANGES`, or `INCONCLUSIVE`. Missing required evidence never produces
 `READY`.
 
+Semantic review examines implementation logic, contract mismatches, affected
+callers, edge and error paths, and missing-test risk. Passing tests are evidence, not proof that the implementation is correct.
+
+The full review flow is:
+
+```text
+explicit review scope
+→ requirement / standards discovery
+→ impact-aware verification planning
+→ authorized disposable execution
+→ senior-style semantic review
+→ deterministic evidence reduction
+→ READY / NEEDS_CHANGES / INCONCLUSIVE
+```
+
 ## Version boundaries
 
 - **V1:** local independent review and deterministic verification core.
 - **V2:** user-initiated GitHub PR review through GitHub MCP, with approval-gated top-level publication.
 - **V3:** authorized event trigger and deterministic inline mapping. MCP remains an integration interface, not the trigger.
 
-V1 is the implemented local product. The current release candidate is
-`v0.1.7`; V2/V3 remain unimplemented. The repository's release-readiness checks
+V1 is the implemented local product. The current release is
+`v0.1.8`; V2/V3 remain unimplemented. The repository's release-readiness checks
 cover the complete local workflow, installability, Skill instructions,
 acceptance scenarios, and self-hosting evidence.
 
@@ -82,11 +97,16 @@ presentation-only: the complete canonical candidate set and authority remain
 unchanged, and acknowledging a source is inspection/context only, not
 authoritative selection.
 
+The reviewer inspects the complete winning requirement set; persisted artifact
+comparison capacity does not cap how many winning sources can be reviewed.
+
 The root `SKILL.md` is the full-review entrypoint. It orchestrates the canonical
 Python builders/loaders for ChangeSet, discovery, planning/execution,
 SemanticAssessment, ReviewArtifact, report, and exit semantics. The standalone
 CLI intentionally exposes only deterministic capture; it is not a prompt-free
 semantic-review command.
+A bare `$pre-pr-verify` invocation performs real senior-style semantic inspection;
+green verification is evidence and does not substitute for that review.
 The exact full-review imports and call sequence are in
 [`docs/09_v1_skill_runbook.md`](docs/09_v1_skill_runbook.md).
 
@@ -94,6 +114,10 @@ The default Markdown report includes a concise `Semantic Review` section for
 all five axes, showing the final axis status, the semantic conclusion, the
 review rationale, and stable finding references. Verification results remain
 visible as separate evidence; passing checks do not replace semantic review.
+Canonical machine artifacts remain authoritative. A confirmed verification
+failure may block readiness, while a required check without reliable attribution
+or evidence remains `INCONCLUSIVE`; a nonzero process status alone is not a
+candidate regression.
 
 ## Development
 
@@ -110,8 +134,8 @@ To validate the built core independently of the source checkout:
 
 ```sh
 uv venv /tmp/pre-pr-verify-install
-uv pip install --python /tmp/pre-pr-verify-install/bin/python \
-  dist/pre_pr_verify-0.1.7-py3-none-any.whl
+  uv pip install --python /tmp/pre-pr-verify-install/bin/python \
+  dist/pre_pr_verify-0.1.8-py3-none-any.whl
 /tmp/pre-pr-verify-install/bin/python -c \
   "import pre_pr_verify; print(pre_pr_verify.__version__)"
 ```
@@ -152,10 +176,11 @@ network service is required by the deterministic core or default test suite.
 - Local macOS/Linux Git repositories only; Windows is deferred.
 - Explicit-value output redaction is bounded and best-effort.
 - No provider/model token or context-window policy.
+- No dependency/runtime provisioning or universal package-manager support.
 - No language-specific AST/dependency engine.
 - No scanner auto-installation.
 - No inferred monorepo dependency engine or enterprise policy engine.
-- No GitHub MCP, PR publication, event trigger, V2, or V3 behavior.
+- No GitHub MCP, GitHub PR publication, event trigger, auto-merge, V2, or V3 behavior.
 
 ## Documentation
 

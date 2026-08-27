@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.8 - 2026-08-28
+
+- Strengthen the full-review path with bounded senior-style semantic inspection
+  and readable per-axis rationale, while keeping canonical machine artifacts
+  authoritative.
+- Harden verifier runtime identity and canonical final-report handoff across
+  the Skill and deterministic core.
+- Keep opaque post-launch nonzero results from being treated as candidate
+  verification failures without reliable attribution; confirmed failures still
+  block readiness and unresolved required evidence remains `INCONCLUSIVE`.
+- Review complete winning requirement sets independently of persisted comparison
+  capacity.
+
 ## 0.1.7 - 2026-08-26
 
 - Improve large same-precedence requirement setup by filling overflow

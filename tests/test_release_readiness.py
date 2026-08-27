@@ -177,7 +177,7 @@ def test_runtime_has_no_developer_path_or_provider_key_dependency() -> None:
 def test_current_version_and_documented_boundaries() -> None:
     readme = Path("README.md").read_text()
 
-    assert __version__ == "0.1.7"
+    assert __version__ == "0.1.8"
     assert Path(".python-version").read_text().strip() == "3.12.13"
     assert "Semantic review, ReviewArtifact reduction/reporting, and GitHub integration remain unimplemented" not in readme
     assert "No `.env`" in readme
