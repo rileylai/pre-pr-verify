@@ -13,6 +13,8 @@ from pre_pr_verify.executor import execute_request
 from pre_pr_verify.git_capture import capture_changeset
 from pre_pr_verify.models import ScopeMode
 from pre_pr_verify.review import (
+    _REPORT_RATIONALE_LIMIT,
+    _report_text,
     build_review_artifact,
     load_review_artifact,
     render_markdown_report,
@@ -427,6 +429,91 @@ def test_semantic_rationale_is_bounded_and_markdown_safe(tmp_path: Path) -> None
     assert "detail-sha256:" not in report
     assert r"unsafe\n\n\#\# Fake heading" in report
     assert report.count("Verdict: **READY**") == 1
+    reason = next(
+        line.removeprefix("- Reason: ")
+        for line in report.splitlines()
+        if line.startswith("- Reason: unsafe")
+    )
+    assert len(reason) <= _REPORT_RATIONALE_LIMIT
+    assert reason.endswith("...")
+
+
+def test_semantic_rationale_preserves_short_and_mid_length_text(tmp_path: Path) -> None:
+    scope = base_scope(tmp_path)
+    short = "Reviewed the changed implementation and its caller contract."
+    mid_length = "Reviewed changed paths and callers for compatibility evidence " * 5
+    assert len(mid_length) > 240
+    assert len(mid_length) < _REPORT_RATIONALE_LIMIT
+    reviewed = artifact(
+        scope,
+        assessment(
+            scope,
+            axes=semantic_axes(
+                rationales={SemanticAxis.SPEC: short, SemanticAxis.STANDARDS: mid_length}
+            ),
+        ),
+    )
+
+    report = render_markdown_report(reviewed)
+
+    assert f"- Reason: {short}" in report
+    assert f"- Reason: {mid_length}" in report
+    assert f"- Reason: {mid_length}..." not in report
+
+
+def test_semantic_rationale_truncates_at_the_nearest_sentence_boundary(
+    tmp_path: Path,
+) -> None:
+    scope = base_scope(tmp_path)
+    first = "The implementation preserves the binding and legacy loader behavior."
+    second = "The focused regression tests cover the exact boundary and reducer handoff."
+    rationale = f"sentence-aware: {first} {second} " + ("additional context " * 80)
+    reviewed = artifact(
+        scope,
+        assessment(scope, axes=semantic_axes(rationales={SemanticAxis.SPEC: rationale})),
+    )
+
+    report = render_markdown_report(reviewed)
+
+    reason = next(
+        line.removeprefix("- Reason: ")
+        for line in report.splitlines()
+        if line.startswith("- Reason: sentence-aware:")
+    )
+    assert reason == f"sentence-aware: {first} {second}..."
+
+
+def test_semantic_rationale_uses_a_word_boundary_when_no_sentence_fits(
+    tmp_path: Path,
+) -> None:
+    scope = base_scope(tmp_path)
+    rationale = "word-fallback: " + ("reviewed compatibility evidence " * 60)
+    reviewed = artifact(
+        scope,
+        assessment(scope, axes=semantic_axes(rationales={SemanticAxis.SPEC: rationale})),
+    )
+
+    report = render_markdown_report(reviewed)
+
+    reason = next(
+        line.removeprefix("- Reason: ")
+        for line in report.splitlines()
+        if line.startswith("- Reason: word-fallback:")
+    )
+    prefix = reason.removesuffix("...")
+    assert reason.endswith("...")
+    assert len(reason) <= _REPORT_RATIONALE_LIMIT
+    assert rationale.startswith(prefix)
+    assert rationale[len(prefix)].isspace()
+
+
+def test_generic_report_text_keeps_its_existing_bound() -> None:
+    value = "generic-field-" + ("x" * 500)
+
+    rendered = _report_text(value)
+
+    assert rendered == value[:237] + "..."
+    assert len(rendered) == 240
 
 
 def test_human_report_resolves_bound_references_without_opaque_identities(

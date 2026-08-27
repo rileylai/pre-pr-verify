@@ -619,7 +619,12 @@ def _axis_label(axis: SemanticAxis) -> str:
     }[axis]
 
 
-def _report_text(value: str) -> str:
+_REPORT_RATIONALE_LIMIT = 640
+_REPORT_ELLIPSIS = "..."
+_REPORT_SENTENCE_ENDINGS = frozenset(".!?。！？")
+
+
+def _escaped_report_fragments(value: str) -> list[str]:
     escaped: list[str] = []
     for character in value:
         if character == "\n":
@@ -634,6 +639,11 @@ def _report_text(value: str) -> str:
             escaped.append("\\" + character)
         else:
             escaped.append(character)
+    return escaped
+
+
+def _report_text(value: str) -> str:
+    escaped = _escaped_report_fragments(value)
     rendered = "".join(escaped)
     if len(rendered) <= 240:
         return rendered
@@ -648,6 +658,51 @@ def _report_text(value: str) -> str:
     return "".join(visible) + "..."
 
 
+def _report_rationale(value: str) -> str:
+    """Render semantic rationale with a larger, deterministic human-report budget."""
+
+    escaped = _escaped_report_fragments(value)
+    rendered = "".join(escaped)
+    if len(rendered) <= _REPORT_RATIONALE_LIMIT:
+        return rendered
+
+    content_budget = _REPORT_RATIONALE_LIMIT - len(_REPORT_ELLIPSIS)
+    sentence_end = max(
+        (
+            index + 1
+            for index, character in enumerate(rendered[:content_budget])
+            if character in _REPORT_SENTENCE_ENDINGS
+            and (
+                index + 1 == len(rendered)
+                or rendered[index + 1].isspace()
+            )
+        ),
+        default=0,
+    )
+    if sentence_end:
+        return rendered[:sentence_end] + _REPORT_ELLIPSIS
+
+    word_end = max(
+        (
+            index + 1
+            for index, character in enumerate(rendered[:content_budget])
+            if character.isspace()
+        ),
+        default=0,
+    )
+    if word_end:
+        return rendered[:word_end].rstrip() + _REPORT_ELLIPSIS
+
+    visible: list[str] = []
+    length = 0
+    for fragment in escaped:
+        if length + len(fragment) > content_budget:
+            break
+        visible.append(fragment)
+        length += len(fragment)
+    return "".join(visible) + _REPORT_ELLIPSIS
+
+
 def _semantic_review_lines(
     artifact: ReviewArtifact | LegacyReviewArtifact,
     resolver: _ReportReferenceResolver,
@@ -660,7 +715,7 @@ def _semantic_review_lines(
         if summaries is not None:
             summary = next(item for item in summaries if item.axis is axis.axis)
             lines.append(f"- Semantic conclusion: **{summary.status.value.upper()}**")
-            lines.append(f"- Reason: {_report_text(summary.rationale)}")
+            lines.append(f"- Reason: {_report_rationale(summary.rationale)}")
             references: list[str] = []
             for finding_id in axis.finding_ids:
                 finding = finding_by_id[finding_id]
