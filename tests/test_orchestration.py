@@ -367,19 +367,18 @@ def test_completed_evidence_survives_later_presentation_failure_without_rerun(
     with pytest.raises(RuntimeError, match="presentation failure"):
         raise RuntimeError("presentation failure")
 
-    reloaded = orchestration.execute_authorized_plan(
-        setup,
+    persisted_evidence_path = persisted_path(evidence_path, authorization, changeset)
+    reloaded = orchestration.load_completed_execution(
+        persisted_evidence_path,
         changeset,
         discovery,
         plan,
-        capability(),
-        authorization,
-        evidence_path=evidence_path,
+        authorization=authorization,
     )
 
     assert calls == 1
     assert reloaded == evidence
-    assert persisted_path(evidence_path, authorization, changeset).exists()
+    assert persisted_evidence_path.exists()
 
 
 def test_stale_evidence_is_rejected_for_a_different_plan(
@@ -768,19 +767,18 @@ def test_canonical_full_review_lifecycle_is_deterministic(
     with pytest.raises(RuntimeError, match="presentation failure"):
         raise RuntimeError("presentation failure")
 
-    reused_evidence = orchestration.execute_authorized_plan(
-        setup,
+    persisted_evidence_path = persisted_path(evidence_path, authorization, changeset)
+    reused_evidence = orchestration.load_completed_execution(
+        persisted_evidence_path,
         changeset,
         discovery,
         plan,
-        execution_capability,
-        authorization,
-        evidence_path=evidence_path,
+        authorization=authorization,
     )
     assert reused_evidence == evidence
     assert executor_calls == 1
     assert len(evidence.executions) == 1
-    assert persisted_path(evidence_path, authorization, changeset).is_file()
+    assert persisted_evidence_path.is_file()
 
     assessment = build_semantic_assessment(
         changeset,

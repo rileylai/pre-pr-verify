@@ -244,6 +244,60 @@ def test_full_review_requires_canonical_semantic_report_in_final_result() -> Non
     )
 
 
+def test_execution_retry_recovery_is_single_path_and_fail_closed() -> None:
+    skill = Path("SKILL.md").read_text()
+    runbook = Path("docs/09_v1_skill_runbook.md").read_text()
+    execution_start = runbook.index("### 4. Authorized execution")
+    execution_end = runbook.index("### 5. Mandatory senior semantic inspection gate")
+    execution = runbook[execution_start:execution_end]
+    first_start = execution.index("#### First-attempt API")
+    recovery_start = execution.index("#### Recovery after possible launch")
+    first_attempt = " ".join(execution[first_start:recovery_start].split())
+    recovery = " ".join(execution[recovery_start:].split())
+    execution_text = " ".join(execution.split())
+
+    assert "exactly one verifier-owned `review_run_dir`" in execution_text
+    assert "derive exactly one" in execution_text
+    assert "before the first execution attempt" in execution_text
+    assert "keep them immutable" in execution_text
+    assert "`execute_authorized_plan(...)` is the first-attempt API" in first_attempt
+    first_attempt_code_start = first_attempt.index("```python")
+    first_attempt_code_end = first_attempt.index(
+        "```", first_attempt_code_start + len("```python")
+    )
+    first_attempt_code = first_attempt[
+        first_attempt_code_start:first_attempt_code_end
+    ]
+    assert "execute_authorized_plan(" in first_attempt_code
+    assert "Call it exactly once" in first_attempt
+    assert "`load_completed_execution(...)`" not in first_attempt
+
+    recovery_code_start = recovery.index("```python")
+    recovery_code_end = recovery.index("```", recovery_code_start + len("```python"))
+    recovery_code = recovery[recovery_code_start:recovery_code_end]
+    assert "load_completed_execution(" in recovery_code
+    assert "execute_authorized_plan(" not in recovery_code
+    assert "Do not call `execute_authorized_plan(...)` again" in recovery
+    assert "same original `review_run_dir`" in recovery
+    assert "same original authorization-scoped evidence target" in recovery
+    assert "never allocate a new run directory or evidence namespace" in recovery
+    assert "zero additional command launches" in recovery
+    assert "absent, incomplete, invalid, stale, or unreadable" in recovery
+    assert "outcome remains `UNKNOWN`" in recovery
+    assert "fail closed" in recovery
+    assert "do not retry" in recovery
+    assert "genuinely new explicit authorization flow" in recovery
+    assert "prior execution outcome is unknown" in recovery
+    assert "it will reuse evidence" not in execution_text
+
+    skill_text = " ".join(skill.split())
+    assert "allocate exactly one verifier-owned" in skill_text
+    assert "`execute_authorized_plan(...)` once for first attempt" in skill_text
+    assert "use only `load_completed_execution(...)` on target" in skill_text
+    assert "Absent/invalid evidence is `UNKNOWN`: fail closed; no retry" in skill_text
+    assert "New execution requires new explicit authorization telling user" in skill_text
+
+
 def test_spec_limit_gap_does_not_stop_independent_semantic_axes() -> None:
     runbook = Path("docs/09_v1_skill_runbook.md").read_text()
     assert "Spec `INCONCLUSIVE`" in runbook

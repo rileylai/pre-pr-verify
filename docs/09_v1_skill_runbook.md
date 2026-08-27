@@ -276,6 +276,20 @@ Construct `ExecutionCapability` from actual host enforcement and explicit
 authorization. `required_capabilities` comes only from trusted host/invocation
 policy. For an ordinary local command:
 
+Create exactly one verifier-owned `review_run_dir` and derive exactly one
+`evidence_path = review_run_dir / "verification-evidence.json"` before the
+first execution attempt. Bind both to the current
+`VerificationAuthorization` and keep them immutable for the authorization.
+Never allocate another run directory or evidence path after execution is
+attempted.
+
+#### First-attempt API
+
+`execute_authorized_plan(...)` is the first-attempt API. Call it exactly once
+for this authorization. It may reuse already-valid scoped evidence, but when
+that target does not exist it executes the plan; it is therefore not a safe
+recovery API after execution may have begun.
+
 ```python
 required_capabilities = (CapabilityName.OUTPUT_LIMITS,)
 authorization = authorize_verification_plan(
@@ -312,11 +326,37 @@ The evidence path is scoped to a temporary review run outside the author
 repository. The persisted filename is derived from the exact
 `VerificationAuthorization.binding_identity` (plan, capability, and
 execution-policy identity), so distinct authorizations never collide even
-when the plan is unchanged. On a later call, `execute_authorized_plan` first
-calls canonical `load_completed_execution` and reuses only evidence matching
-the ChangeSet, DiscoveryResult, exact plan, and current verification
-contract/profile bindings. Invalid or stale evidence is an error; do not trust
-it and do not silently execute a replacement command.
+when the plan is unchanged.
+
+#### Recovery after possible launch
+
+If a wrapper, driver, shell, session, debug, reporting, or presentation step
+fails after execution may have begun, treat the outcome as `UNKNOWN`. Missing
+stdout, wrapper output, a printed path, expected progress, or immediately
+visible evidence is not evidence that no command launched. Do not call
+`execute_authorized_plan(...)` again under the same authorization. Recovery is
+only:
+
+```python
+evidence = load_completed_execution(
+    original_authorization_scoped_evidence_target,
+    changeset,
+    discovery,
+    plan,
+    authorization=authorization,
+)
+```
+
+Use the same original `review_run_dir` and the same original
+authorization-scoped evidence target; never allocate a new run directory or
+evidence namespace for recovery. If `load_completed_execution(...)` returns
+valid canonical evidence matching the ChangeSet, DiscoveryResult, exact plan,
+and current verification contract/profile bindings, reuse it and continue
+with zero additional command launches. If evidence is absent, incomplete,
+invalid, stale, or unreadable, the outcome remains `UNKNOWN`: fail closed,
+preserve missing/inconclusive verification evidence, and do not retry. A new
+execution requires a genuinely new explicit authorization flow that tells the
+user the prior execution outcome is unknown.
 Every command runs in its own fresh disposable environment. Preserve actual
 host capability reporting, environment-profile identity, NOT_RUN/failure kinds,
 incomplete materialization, bounded output, accepted risks, and separate
@@ -489,9 +529,10 @@ must not replace or append to it with handwritten verdict prose.
 Record `artifact.verdict` and `finalized.exit_code` before presenting the
 report. A debug, semantic-construction, or reporting failure cannot authorize
 or reinterpret the canonical verdict. If a later step needs to recover after a
-presentation failure, reload the persisted evidence with the same authorized
-plan; never rerun the checks automatically. `EvidenceReuseError` is a
-fail-closed stop, not permission to trust or replace stale evidence.
+presentation failure, call `load_completed_execution(...)` directly for the
+same authorization-scoped evidence target; never rerun the checks
+automatically. `EvidenceReuseError` is a fail-closed stop, not permission to
+trust or replace stale evidence.
 Source/spec/output detail remains in bound upstream artifacts; the report is
 only a concise projection.
 

@@ -70,10 +70,12 @@ and receiving the external verification authorization answer, call
 `authorize_verification_plan(...)` while setup is at `FINAL_CONFIRMATION`. It
 binds the exact plan, capability, and policy. Changes require reauthorization.
 For `review-without-execution`, skip authorization and preserve the existing
-missing-evidence contract. For an authorized plan, call
-`execute_authorized_plan(...)` with one temporary run-scoped evidence path
-outside the author repository. Valid bound evidence is reused after a later
-reporting/debug failure, never silently rerun.
+missing-evidence contract. Authorized: allocate exactly one verifier-owned
+`review_run_dir` and auth-scoped `evidence_path` before first execution; keep
+immutable. Call `execute_authorized_plan(...)` once for first attempt. After
+possible launch, use only `load_completed_execution(...)` on target.
+Absent/invalid evidence is `UNKNOWN`: fail closed; no retry. New execution
+requires new explicit authorization telling user prior outcome unknown.
 
 After execution, pass canonical `VerificationEvidence` directly through the
 semantic inspection gate and assessment to finalization. Progress prose may
