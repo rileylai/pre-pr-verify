@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from pre_pr_verify import __version__
 from pre_pr_verify.schema import (
     render_changeset_schema,
@@ -15,6 +17,15 @@ from pre_pr_verify.schema import (
     render_verification_evidence_schema,
     render_verification_plan_schema,
 )
+
+SKILL_MAX_BYTES = 6_000
+
+
+def _assert_skill_size(path: Path) -> None:
+    size = len(path.read_bytes())
+    assert size < SKILL_MAX_BYTES, (
+        f"{path} must be below {SKILL_MAX_BYTES} UTF-8 bytes; got {size}"
+    )
 
 
 def test_all_v1_schemas_are_available_from_checkout_and_installed_core() -> None:
@@ -49,8 +60,19 @@ def test_root_skill_is_small_and_routes_to_existing_contracts() -> None:
     ]
 
     assert content.startswith("---\nname: pre-pr-verify\n")
-    assert len(content) < 6_000
+    _assert_skill_size(skill)
     assert all(reference in content and Path(reference).is_file() for reference in required_references)
+
+
+def test_skill_size_contract_counts_utf8_bytes(tmp_path: Path) -> None:
+    unicode_text = "a" * 5_998 + "é"
+    temporary_skill = tmp_path / "SKILL.md"
+    temporary_skill.write_text(unicode_text, encoding="utf-8")
+
+    assert len(unicode_text) < 6_000
+    assert len(unicode_text.encode("utf-8")) >= 6_000
+    with pytest.raises(AssertionError):
+        _assert_skill_size(temporary_skill)
 
 
 def test_skill_runbook_routes_every_canonical_stage_and_policy_boundary() -> None:
@@ -176,9 +198,24 @@ def test_runtime_has_no_developer_path_or_provider_key_dependency() -> None:
 
 def test_current_version_and_documented_boundaries() -> None:
     readme = Path("README.md").read_text()
+    validation = " ".join(
+        Path("docs/08_development_validation_and_self_hosting.md")
+        .read_text()
+        .split()
+    )
 
     assert __version__ == "0.1.8"
     assert Path(".python-version").read_text().strip() == "3.12.13"
     assert "Semantic review, ReviewArtifact reduction/reporting, and GitHub integration remain unimplemented" not in readme
+    assert "Agent Skill + deterministic Python core" in readme
+    assert "OpenAI Codex" in readme
+    assert "Claude Code" in readme
+    assert "~/.codex/skills/pre-pr-verify" in readme
+    assert "~/.claude/skills/pre-pr-verify" in readme
+    assert "$pre-pr-verify" in readme
+    assert "/pre-pr-verify" in readme
+    assert "fresh independent OpenAI Codex forward-test" in validation
+    assert "fresh independent Claude Code forward-test" in validation
+    assert "not run by the implementation session" in validation
     assert "No `.env`" in readme
     assert "No GitHub MCP" in readme

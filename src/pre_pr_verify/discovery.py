@@ -43,6 +43,7 @@ _ROOT_REQUIREMENT_NAMES = {
 }
 _STANDARD_NAMES = {
     b"agents.md",
+    b"claude.md",
     b"contributing.md",
     b"code_style.md",
     b"style_guide.md",

@@ -2,7 +2,10 @@
 
 PrePR Verify is an independent, evidence-based pre-PR verification Skill for AI-assisted software development. A fresh reviewer reconstructs context from repository state instead of trusting the implementation session's claim that the work is complete.
 
-The product is a **Codex Skill + deterministic Python core**. The Skill owns semantic judgment and workflow orchestration. The core owns Git scope, typed artifacts, command contracts, evidence references, schema validation, and verdict invariants.
+The product is an **Agent Skill + deterministic Python core**. The Skill owns
+semantic judgment and workflow orchestration. The core owns Git scope, typed
+artifacts, command contracts, evidence references, schema validation, and verdict
+invariants.
 
 ## Review model
 
@@ -47,8 +50,10 @@ acceptance scenarios, and self-hosting evidence.
 
 ## Install and use the Skill
 
-Install the repository as a Codex Skill checkout, then install its locked Python
-core:
+Install the same repository as an Agent Skill checkout, then install its locked
+Python core. The supported local Skill hosts are OpenAI Codex and Claude Code.
+
+### OpenAI Codex
 
 ```sh
 git clone https://github.com/rileylai/pre-pr-verify.git \
@@ -57,14 +62,31 @@ cd ~/.codex/skills/pre-pr-verify
 uv sync --locked
 ```
 
-In a human-attached Codex session, invoke it with a repository and select one of
-the displayed scope intents and boundaries, for example:
+Invoke it as `$pre-pr-verify` in a human-attached Codex session.
+
+### Claude Code
+
+```sh
+git clone https://github.com/rileylai/pre-pr-verify.git \
+  ~/.claude/skills/pre-pr-verify
+cd ~/.claude/skills/pre-pr-verify
+uv sync --locked
+```
+
+Invoke the same Skill as `/pre-pr-verify` in a human-attached Claude Code
+session. Both layouts use the same root `SKILL.md`, deterministic Python core,
+and review workflow; host-provided semantic reasoning may differ.
+
+In either host, invoke the same Skill with a repository and select one of the
+displayed scope intents and boundaries. For Codex, for example:
 
 ```text
 Use $pre-pr-verify to review /path/to/repository. I want current branch scope;
 show me the bounded base candidates before I choose one.
 Treat docs/feature-spec.md as the explicit requirement.
 ```
+
+In Claude Code, use `/pre-pr-verify` in the first line instead.
 
 The interactive setup supports working changes, current branch with explicit
 base selection, an inclusive feature-start commit selected from recent history,
@@ -134,13 +156,13 @@ To validate the built core independently of the source checkout:
 
 ```sh
 uv venv /tmp/pre-pr-verify-install
-  uv pip install --python /tmp/pre-pr-verify-install/bin/python \
+uv pip install --python /tmp/pre-pr-verify-install/bin/python \
   dist/pre_pr_verify-0.1.8-py3-none-any.whl
 /tmp/pre-pr-verify-install/bin/python -c \
   "import pre_pr_verify; print(pre_pr_verify.__version__)"
 ```
 
-The wheel/sdist are the Python core distribution. The Git checkout is the Codex
+The wheel/sdist are the Python core distribution. The Git checkout is the Agent
 Skill distribution and therefore contains `SKILL.md`, numbered references, and
 checked-in schemas.
 
@@ -168,8 +190,8 @@ Without a declaration or other repository-native guidance, PrePR Verify does
 not invent language-default commands; declarations remain candidates and never
 grant execution authority.
 
-No `.env`, Codex/Claude/OpenAI API key, provider-specific token management, or
-network service is required by the deterministic core or default test suite.
+No `.env`, provider API key, provider-specific token management, or network
+service is required by the deterministic core or default test suite.
 
 ## Intentional V1 limits
 

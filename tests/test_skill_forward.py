@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from pre_pr_verify.discovery import ProvidedRequirement, discover_review_sources
@@ -124,11 +126,118 @@ def test_skill_provenance_pins_owned_resources_and_canonical_runtime() -> None:
 
     launch = runbook[runbook.index("## Launch defaults") :]
     launch_text = " ".join(launch.split())
-    assert "<SKILL_ROOT>/.venv/bin/python" in launch
+    assert "<SKILL_ROOT>/.venv/bin/python -I" in launch
+    assert "SKILL_PYTHON -I" in combined
     assert "target repository's `uv run python` is not a canonical core invocation" in launch_text
     assert "`uv run python /path/to/driver.py`" not in launch
     assert "driver outside the target repository" in launch_text
     assert "process cwd `<SKILL_ROOT>`" in launch_text
+
+
+def test_skill_frontmatter_is_agent_skills_portable() -> None:
+    content = Path("SKILL.md").read_text()
+    _, frontmatter, _ = content.split("---", 2)
+
+    assert "name: pre-pr-verify" in frontmatter
+    assert "description:" in frontmatter
+    for unsupported_field in ("model:", "context:", "background:", "allowed-tools:"):
+        assert unsupported_field not in frontmatter
+
+
+def _prepare_copied_skill_runtime(skill_root: Path) -> Path:
+    subprocess.run(
+        [sys.executable, "-m", "venv", str(skill_root / ".venv")],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    skill_python = skill_root / ".venv" / "bin" / "python"
+    site_packages = subprocess.run(
+        [str(skill_python), "-c", "import site; print(site.getsitepackages()[0])"],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    ).stdout.strip()
+    (Path(site_packages) / "pre_pr_verify_skill_src.pth").write_text(
+        str(skill_root / "src") + "\n"
+    )
+    return skill_python
+
+
+def _copy_skill_tree(source: Path, destination: Path) -> None:
+    destination.mkdir(parents=True)
+    for relative in ("SKILL.md", "docs", "schemas", "src", "pyproject.toml", "uv.lock"):
+        source_path = source / relative
+        destination_path = destination / relative
+        if source_path.is_dir():
+            shutil.copytree(source_path, destination_path)
+        else:
+            shutil.copy2(source_path, destination_path)
+
+
+def test_same_skill_tree_works_from_codex_and_claude_layouts(tmp_path: Path) -> None:
+    source = Path(__file__).resolve().parents[1]
+    target_repository = tmp_path / "target"
+    target_repository.mkdir()
+    shadow_package = target_repository / "pre_pr_verify"
+    shadow_package.mkdir()
+    (shadow_package / "__init__.py").write_text('__version__ = "target-shadow"\n')
+    driver = tmp_path / "driver.py"
+    driver.write_text(
+        "import json\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "import pre_pr_verify\n"
+        "from pre_pr_verify.build_identity import installed_core_identity\n"
+        "print(json.dumps({\n"
+        "    'executable': sys.executable,\n"
+        "    'package': str(Path(pre_pr_verify.__file__).resolve()),\n"
+        "    'version': pre_pr_verify.__version__,\n"
+        "    'identity': installed_core_identity(),\n"
+        "}))\n"
+    )
+
+    runtimes: dict[str, dict[str, str]] = {}
+    for host_directory in (".codex", ".claude"):
+        skill_root = tmp_path / host_directory / "skills" / "pre-pr-verify"
+        _copy_skill_tree(source, skill_root)
+        skill_python = _prepare_copied_skill_runtime(skill_root)
+        environment = os.environ.copy()
+        environment["PYTHONPATH"] = str(target_repository)
+        result = subprocess.run(
+            [str(skill_python), "-I", str(driver)],
+            cwd=target_repository,
+            env=environment,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        runtimes[host_directory] = json.loads(result.stdout)
+        assert Path(runtimes[host_directory]["executable"]).resolve() == skill_python.resolve()
+        assert skill_root / "src" in Path(runtimes[host_directory]["package"]).parents
+        assert runtimes[host_directory]["version"] != "target-shadow"
+        assert not (skill_root / ".git").exists()
+
+    assert runtimes[".codex"]["identity"] == runtimes[".claude"]["identity"]
+
+    claude_init = tmp_path / ".claude" / "skills" / "pre-pr-verify" / "src" / "pre_pr_verify" / "__init__.py"
+    claude_init.write_text(claude_init.read_text() + "\n# identity mutation fixture\n")
+    claude_python = tmp_path / ".claude" / "skills" / "pre-pr-verify" / ".venv" / "bin" / "python"
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(target_repository)
+    changed = subprocess.run(
+        [str(claude_python), "-I", str(driver)],
+        cwd=target_repository,
+        env=environment,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert json.loads(changed.stdout)["identity"] != runtimes[".claude"]["identity"]
 
 
 def test_installed_skill_runtime_is_independent_of_target_cwd(tmp_path: Path) -> None:
@@ -157,9 +266,9 @@ def test_installed_skill_runtime_is_independent_of_target_cwd(tmp_path: Path) ->
     )
 
     environment = os.environ.copy()
-    environment.pop("PYTHONPATH", None)
+    environment["PYTHONPATH"] = str(target_repository)
     result = subprocess.run(
-        [str(skill_python), str(driver)],
+        [str(skill_python), "-I", str(driver)],
         cwd=target_repository,
         env=environment,
         check=True,

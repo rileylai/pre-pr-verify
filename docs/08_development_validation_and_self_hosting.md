@@ -38,18 +38,21 @@ ChangeSet
   -> Markdown report
 ```
 
-With this pipeline, a fresh Codex session can run a genuine local V1 dogfood review. The result is additional release evidence, not a substitute for independent validation.
+With this pipeline, a fresh supported Skill-host session can run a genuine
+local V1 dogfood review. The result is additional release evidence, not a
+substitute for independent validation.
 
 ### V1 release validation
 
 V1 release validation includes the deterministic acceptance suite, security fixtures, READY/NEEDS_CHANGES/INCONCLUSIVE fixtures, model-evaluation verdict-safety hard gates, and self-hosting validation. After these gates pass and V1 is released, a last-known-good V1 verifier may serve as the required pre-PR gate for V2/V3 development.
 
-For V1 release validation, model-evaluation evidence is a fresh independent
-Codex Skill forward-test against realistic local-review requests and the fixed
-verdict-safety acceptance rubric. It is not a provider runtime, API-key-based
-test harness, token counter, or orchestration framework. Deterministic fixtures
-remain the reproducible hard gates; the independent Skill review supplies the
-separate semantic/bootstrap evidence.
+For current cross-host release validation, model-evaluation evidence is a fresh
+independent OpenAI Codex forward-test and a fresh independent Claude Code
+forward-test against realistic local-review requests and the fixed
+verdict-safety acceptance rubric. These are host-session acceptance checks, not
+a provider runtime, API-key-based test harness, token counter, or orchestration
+framework. Deterministic fixtures remain the reproducible hard gates; the
+independent Skill reviews supply the separate semantic/bootstrap evidence.
 
 Release acceptance also requires a locked clean sync, sdist/wheel build,
 installation and import from the built wheel in a disposable environment,
@@ -67,12 +70,33 @@ wheel and from an isolated copied-Skill tree with no `.git`. The value must be
 stable for identical installed Python-core content and change when that content
 changes.
 
-The post-V1 setup usability gate also includes a fresh Skill forward-test in
-which a representative narrow local review is completed with numeric scope,
-requirement, and verification choices plus one explicit final confirmation.
-The test must prove that source acknowledgement does not alter requirement
-precedence, repository commands do not grant execution authority, and headless
-setup never prompts or invents missing inputs.
+The post-V1 setup usability gate also includes fresh OpenAI Codex and Claude
+Code forward-tests in which a representative narrow local review is completed with
+numeric scope, requirement, and verification choices plus one explicit final
+confirmation. Each test must prove that source acknowledgement does not alter
+requirement precedence, repository commands do not grant execution authority,
+and headless setup never prompts or invents missing inputs.
+
+## Cross-host Skill distribution (v0.1.9)
+
+The v0.1.9 candidate is installed from one exact candidate SHA into either
+`~/.codex/skills/pre-pr-verify` or `~/.claude/skills/pre-pr-verify`. The former
+is invoked as `$pre-pr-verify` in Codex; the latter is invoked as
+`/pre-pr-verify` in Claude Code. Both use the same root `SKILL.md`, locked
+Python core, and deterministic contracts.
+
+After independent review, run the manual fresh-session acceptance once per
+host. Complete scope choice, requirements choice, verification authorization,
+final confirmation, semantic inspection, and canonical verdict/report. Confirm
+that the host does not edit findings automatically, skip explicit
+authorization, invent setup choices, reconstruct the canonical report, or
+turn evidence gaps into `READY`. These host dogfoods are required release
+evidence and are not run by the implementation session.
+
+Repository Standards discovery includes `CLAUDE.md` alongside existing
+conventional standards files. Its content remains untrusted repository
+evidence with no security or execution authority and cannot override the
+PrePR Verify Skill policy.
 
 ## Bootstrap and circular trust
 

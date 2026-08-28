@@ -368,6 +368,26 @@ finding/gap/reference presentation. Frozen ReviewArtifact `1.0.0` remains
 loadable without the new summaries. No second report artifact, model benchmark,
 AST/dependency engine, scanner installation, or execution authority is added.
 
+## ADR-034: Host-portable Agent Skill distribution
+
+**Status:** Accepted
+
+The Skill/core boundary is host-portable. OpenAI Codex and Claude Code use one
+canonical root `SKILL.md`; Codex installs and invokes it through
+`~/.codex/skills/pre-pr-verify` and `$pre-pr-verify`, while Claude Code uses
+`~/.claude/skills/pre-pr-verify` and `/pre-pr-verify`. Distribution and
+invocation syntax differ, but semantic judgment remains host-model supplied
+and the deterministic contracts remain provider-independent.
+
+The verifier resolves its owned resources and locked Python runtime from the
+loaded Skill root, not from a host-name directory or the target repository.
+No provider runtime abstraction, SDK, model identity, or host adapter is
+introduced. `CLAUDE.md` is added only as a conventional target-repository
+Standards source alongside existing standards files; it remains untrusted
+evidence with no security, execution, or verdict authority. Cross-host release
+evidence requires fresh forward-tests for both supported hosts, while candidate
+self-review remains supplemental.
+
 ## ADR-033: Bind complete winning-set reviewability separately from comparisons
 
 **Status:** Accepted

@@ -6,7 +6,10 @@ PrePR Verify independently decides whether a pending change is ready for a pull 
 
 ## Product boundary
 
-V1 is a Codex Skill plus a small deterministic Python core, not a standalone review product and not a prompt-only Skill.
+V1 is an Agent Skill plus a small deterministic Python core, not a standalone
+review product and not a prompt-only Skill. The single canonical `SKILL.md`
+distribution is supported by OpenAI Codex and Claude Code; host invocation
+syntax differs, but the workflow and deterministic core are shared.
 
 The Skill owns:
 
@@ -115,6 +118,11 @@ V1 is a non-authoring reviewer. It may create caches and build artifacts only in
 boundary. Detailed contracts live in task-specific numbered documents and are
 read only when their stage is active. No future-version module or empty
 abstraction is created merely to mirror a planned architecture.
+
+Repository Standards discovery recognizes conventional `AGENTS.md`,
+`CLAUDE.md`, `CONTRIBUTING.md`, and related scoped standards files as untrusted
+repository evidence. These files have no Skill, security, execution, or verdict
+authority.
 
 The Scope Intent Resolver is Skill orchestration support, not a second scope
 contract. It discovers bounded choices, requires an explicit human or
