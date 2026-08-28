@@ -63,9 +63,10 @@ evidence gaps remain visible.
 - **V2:** user-initiated GitHub PR review through GitHub MCP, with approval-gated top-level publication.
 - **V3:** authorized event trigger and deterministic inline mapping. MCP remains an integration interface, not the trigger.
 
-V1 is the implemented local product. The latest tagged release is `v0.1.8`.
-Current `main` also contains unreleased cross-host Agent Skill support for
-OpenAI Codex and Claude Code planned for `v0.1.9`. V2/V3 remain unimplemented.
+V1 is the implemented local product. The current release is `v0.1.9`.
+It provides cross-host Agent Skill support for OpenAI Codex and Claude Code
+through one canonical `SKILL.md` and the same deterministic Python core.
+V2/V3 remain unimplemented.
 The repository's release-readiness checks cover the complete local workflow,
 installability, Skill instructions, acceptance scenarios, and self-hosting
 evidence.
@@ -156,7 +157,7 @@ To validate the built core independently of the source checkout:
 ```sh
 uv venv /tmp/pre-pr-verify-install
 uv pip install --python /tmp/pre-pr-verify-install/bin/python \
-  dist/pre_pr_verify-0.1.8-py3-none-any.whl
+  dist/pre_pr_verify-0.1.9-py3-none-any.whl
 /tmp/pre-pr-verify-install/bin/python -c \
   "import pre_pr_verify; print(pre_pr_verify.__version__)"
 ```

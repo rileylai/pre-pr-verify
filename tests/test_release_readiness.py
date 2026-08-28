@@ -204,7 +204,7 @@ def test_current_version_and_documented_boundaries() -> None:
         .split()
     )
 
-    assert __version__ == "0.1.8"
+    assert __version__ == "0.1.9"
     assert Path(".python-version").read_text().strip() == "3.12.13"
     assert "Semantic review, ReviewArtifact reduction/reporting, and GitHub integration remain unimplemented" not in readme
     assert "Agent Skill + deterministic Python core" in readme

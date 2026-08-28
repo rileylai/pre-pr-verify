@@ -222,7 +222,7 @@ def finalized_review(repository: Path, tmp_path: Path):
         plan,
         evidence,
         assessment,
-        verifier_version="0.1.8",
+        verifier_version="0.1.9",
         verifier_commit_or_build="report-handoff-fixture",
     )
 
@@ -707,7 +707,7 @@ def test_finalization_reloads_semantics_and_returns_canonical_report(
         plan,
         evidence,
         assessment,
-        verifier_version="0.1.8",
+        verifier_version="0.1.9",
         verifier_commit_or_build="test-build",
     )
 
@@ -1429,7 +1429,7 @@ def test_canonical_full_review_lifecycle_is_deterministic(
         plan,
         reused_evidence,
         assessment,
-        verifier_version="0.1.8",
+        verifier_version="0.1.9",
         verifier_commit_or_build="full-lifecycle-fixture",
     )
     emitted = io.StringIO()

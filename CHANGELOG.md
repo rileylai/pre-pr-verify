@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.9 - 2026-08-28
+
+- Add one canonical Agent Skill distribution for OpenAI Codex and Claude Code,
+  with host-specific installation/invocation and the same deterministic core.
+- Harden Skill-owned runtime provenance so verifier imports come from the
+  installed Skill environment rather than target-repository cwd, `PYTHONPATH`,
+  or local environments.
+- Recognize `CLAUDE.md` as conventional repository Standards evidence while
+  preserving the existing untrusted/no-authority boundary.
+- Improve Semantic Review Markdown presentation so concrete finding references
+  remain visible, required evidence gaps point to Verification/gap sections,
+  and finding-free PASS axes no longer show a misleading Evidence fallback.
+
 ## 0.1.8 - 2026-08-28
 
 - Strengthen the full-review path with bounded senior-style semantic inspection

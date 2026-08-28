@@ -75,7 +75,7 @@ usability gate.
 
 ## Cross-host Skill distribution (v0.1.9)
 
-The v0.1.9 candidate is installed from one exact candidate SHA into either
+The v0.1.9 release is installed from one exact release SHA into either
 `~/.codex/skills/pre-pr-verify` or `~/.claude/skills/pre-pr-verify`. The former
 is invoked as `$pre-pr-verify` in Codex; the latter is invoked as
 `/pre-pr-verify` in Claude Code. Both use the same root `SKILL.md`, locked
