@@ -386,6 +386,94 @@ def test_clean_review_reports_rationale_for_every_axis(tmp_path: Path) -> None:
         assert rationale in report
 
 
+def test_pass_axis_without_finding_refs_omits_semantic_evidence_line(
+    tmp_path: Path,
+) -> None:
+    scope = base_scope(tmp_path)
+    reviewed = artifact(scope, assessment(scope))
+
+    semantic_review = render_markdown_report(reviewed).split(
+        "## Semantic Review", 1
+    )[1].split("## Verification", 1)[0]
+
+    assert "### Spec — **PASS**" in semantic_review
+    assert "- Semantic conclusion: **PASS**" in semantic_review
+    assert "- Evidence:" not in semantic_review
+    assert "no axis-specific finding" not in semantic_review
+
+
+def test_required_evidence_gap_without_finding_refs_points_to_report_gaps(
+    tmp_path: Path,
+) -> None:
+    scope = base_scope(tmp_path)
+    reviewed = artifact(
+        scope,
+        assessment(
+            scope,
+            axes=semantic_axes(
+                statuses={SemanticAxis.TEST_SUFFICIENCY: SemanticStatus.INCONCLUSIVE},
+                gaps={SemanticAxis.TEST_SUFFICIENCY},
+            ),
+        ),
+    )
+    semantic_review = render_markdown_report(reviewed).split(
+        "## Semantic Review", 1
+    )[1].split("## Verification", 1)[0]
+
+    assert (
+        "- Evidence: See Required evidence gaps / Verification below."
+        in semantic_review
+    )
+    assert "no axis-specific finding" not in semantic_review
+
+
+def test_inconclusive_axis_without_required_gap_omits_evidence_line(
+    tmp_path: Path,
+) -> None:
+    scope = base_scope(tmp_path)
+    reviewed = artifact(
+        scope,
+        assessment(
+            scope,
+            axes=semantic_axes(
+                statuses={SemanticAxis.IMPACT: SemanticStatus.FAIL},
+            ),
+        ),
+    )
+    impact = next(axis for axis in reviewed.axes if axis.axis is SemanticAxis.IMPACT)
+    semantic_review = render_markdown_report(reviewed).split(
+        "## Semantic Review", 1
+    )[1].split("## Verification", 1)[0]
+
+    assert impact.status is AxisStatus.INCONCLUSIVE
+    assert impact.required_evidence_gap is False
+    assert "### Impact — **INCONCLUSIVE**" in semantic_review
+    assert "- Evidence:" not in semantic_review
+
+
+def test_finding_refs_remain_rendered_for_finding_bearing_axis(tmp_path: Path) -> None:
+    scope = base_scope(tmp_path)
+    finding = make_finding(
+        scope,
+        axis=SemanticAxis.IMPACT,
+        blocking=True,
+    )
+    reviewed = artifact(
+        scope,
+        assessment(
+            scope,
+            axes=semantic_axes(statuses={SemanticAxis.IMPACT: SemanticStatus.FAIL}),
+            findings=[finding],
+        ),
+    )
+    semantic_review = bound_report(scope, reviewed).split(
+        "## Semantic Review", 1
+    )[1].split("## Verification", 1)[0]
+
+    assert "### Impact — **FAIL**" in semantic_review
+    assert "- Evidence: path: app.py" in semantic_review
+
+
 def test_rationale_is_bound_to_semantic_assessment_and_legacy_artifact_loads(
     tmp_path: Path,
 ) -> None:

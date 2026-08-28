@@ -732,10 +732,9 @@ def _semantic_review_lines(
                     else ""
                 )
                 lines.append(f"- Evidence: {', '.join(shown_references)}{suffix}")
-            else:
+            elif axis.required_evidence_gap:
                 lines.append(
-                    "- Evidence: no axis-specific finding; see the bound "
-                    "SemanticAssessment in the canonical machine artifacts."
+                    "- Evidence: See Required evidence gaps / Verification below."
                 )
         else:
             lines.append(
