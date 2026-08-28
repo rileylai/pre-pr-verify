@@ -368,6 +368,22 @@ finding/gap/reference presentation. Frozen ReviewArtifact `1.0.0` remains
 loadable without the new summaries. No second report artifact, model benchmark,
 AST/dependency engine, scanner installation, or execution authority is added.
 
+## ADR-033: Bind complete winning-set reviewability separately from comparisons
+
+**Status:** Accepted
+
+SemanticAssessment `1.1.0` records `reviewed_requirement_sources` as the
+count-and-identity binding of Discovery's canonical winning
+`candidate_source_ids`. Producer construction and loading require an exact
+match, or an explicit Spec `INCONCLUSIVE` required-evidence gap. This proves
+review completeness without persisting every compatible pair or overlapping
+group. `RequirementComparison` remains a bounded collection of concrete
+compatibility or contradiction evidence; an actual collection overflow still
+creates a Spec `SemanticLimitGap`. The frozen `1.0.0` loader and schema retain
+their pair/group coverage semantics. No Discovery, ReviewArtifact, reducer,
+presentation, runtime-context, retrieval, batching, scheduler, or comparison
+database framework is added.
+
 ## ADR-034: Host-portable Agent Skill distribution
 
 **Status:** Accepted
@@ -387,19 +403,3 @@ Standards source alongside existing standards files; it remains untrusted
 evidence with no security, execution, or verdict authority. Cross-host release
 evidence requires fresh forward-tests for both supported hosts, while candidate
 self-review remains supplemental.
-
-## ADR-033: Bind complete winning-set reviewability separately from comparisons
-
-**Status:** Accepted
-
-SemanticAssessment `1.1.0` records `reviewed_requirement_sources` as the
-count-and-identity binding of Discovery's canonical winning
-`candidate_source_ids`. Producer construction and loading require an exact
-match, or an explicit Spec `INCONCLUSIVE` required-evidence gap. This proves
-review completeness without persisting every compatible pair or overlapping
-group. `RequirementComparison` remains a bounded collection of concrete
-compatibility or contradiction evidence; an actual collection overflow still
-creates a Spec `SemanticLimitGap`. The frozen `1.0.0` loader and schema retain
-their pair/group coverage semantics. No Discovery, ReviewArtifact, reducer,
-presentation, runtime-context, retrieval, batching, scheduler, or comparison
-database framework is added.

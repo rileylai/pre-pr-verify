@@ -8,6 +8,18 @@ Trusted policy is limited to policy shipped with PrePR Verify, an external polic
 
 Requirement and Standards precedence is a separate semantic-review concept defined in `docs/02_review_and_verdict_contracts.md`. A repository requirement may outrank tests or comments when deciding what behavior is expected, but that precedence never grants permission to change Skill behavior, sandboxing, secret handling, or write policy.
 
+### Initial Skill-owned Python launch
+
+The verifier itself must be selected before target repository Python state can
+influence imports. The initial launch invariant is
+`<SKILL_ROOT>/.venv/bin/python -I`, using a verifier-owned driver outside the
+target repository, a process cwd rooted at `<SKILL_ROOT>`, and the target
+repository passed explicitly as data/input. Target `PYTHONPATH`, target cwd,
+target `.venv`, and target-local `pre_pr_verify` must not select or shadow the
+verifier package. Provenance confirms `sys.executable`,
+`pre_pr_verify.__file__`, and `installed_core_identity()`. Codex and Claude
+Code use this same invariant; it adds no runtime abstraction.
+
 ## Repository boundary
 
 All path decisions use canonical raw Git path components, not display strings. `.git/` is never part of the review payload. Symlinks are recorded but never followed. Filesystem capture and discovery source reads open every intermediate repository or Git-metadata directory without following symlinks; an intermediate symlink makes the operation fail or records an unreadable source before outside content is read. Explicit includes and trusted-policy source selections remain repository-bounded. Submodules are represented by gitlink identity and are not recursively reviewed in V1.

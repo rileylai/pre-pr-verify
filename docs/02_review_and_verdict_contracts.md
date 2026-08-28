@@ -66,7 +66,16 @@ The core never silently truncates prose, identifiers, or a semantic collection. 
 
 Generic source inspection is progressive over complete UTF-8 content already captured and identity-bound by the ChangeSet. `context_excerpt <= 2,048` is only a persisted preview bound: matching and an on-demand source iterator operate on the complete captured file. Preview selection overflow is explicit rather than a silently shortened source list. This contract neither derives token limits from character limits nor records provider/model context windows or `max_tokens` policy. Future large-change optimization should use selection, bundling, and focused semantic passes before provider-specific runtime policy.
 
-The highest-precedence requirement candidates remain the semantic authority. Equal-precedence candidates are explicitly recorded as complementary or contradictory comparisons; lower-precedence sources cannot override them. Standards findings require a source in the canonical Standards set, and contextual security findings require concrete evidence from the reviewed scope. Generic repository context is bounded text search over captured effective content, never a language AST, dependency graph, scanner installation, or command execution.
+The highest-precedence requirement candidates remain the semantic authority.
+Concrete materially relevant relationships may be persisted as
+`RequirementComparison` evidence; contradictory winning relationships that are
+identified must be recorded and produce the required Spec evidence gap.
+Compatible candidates do not require exhaustive pair/group records, and
+lower-precedence sources cannot override the winning tier. Standards findings
+require a source in the canonical Standards set, and contextual security
+findings require concrete evidence from the reviewed scope. Generic repository
+context is bounded text search over captured effective content, never a
+language AST, dependency graph, scanner installation, or command execution.
 
 Finding ownership is exact. Every finding appears once in the `finding_ids` of its declared axis, no finding may be orphaned or owned by multiple axes, and category-to-axis compatibility is fixed for V1: Spec categories to Spec, Standards violations to Standards, impact regressions to Impact, test gaps to Test Sufficiency, and contextual-security/unsupported-suspicion findings to Contextual Security. An axis with a confirmed blocking finding cannot claim `PASS`.
 

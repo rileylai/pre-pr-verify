@@ -37,16 +37,38 @@ explicit review scope
 → READY / NEEDS_CHANGES / INCONCLUSIVE
 ```
 
+## What a Review Looks Like
+
+Before execution, the reviewer explicitly confirms the review scope,
+requirement and Standards sources, verification plan, and final execution
+confirmation.
+
+![PrePR Verify review setup](docs/assets/1_review_scope_selection.png)
+
+The completed review reports Spec, Standards, Impact, Test Sufficiency, and
+Contextual Security, followed by a final `READY`, `NEEDS_CHANGES`, or
+`INCONCLUSIVE` verdict.
+
+![PrePR Verify five-axis verdict](docs/assets/5_verdict_and_full_review_report.png)
+
+Each axis keeps a concise semantic rationale. Verification failures remain
+separate evidence, confirmed blocking findings remain explicit, and unresolved
+evidence gaps remain visible.
+
+![PrePR Verify semantic review and evidence](docs/assets/7_semantic_review_rationale.png)
+
 ## Version boundaries
 
 - **V1:** local independent review and deterministic verification core.
 - **V2:** user-initiated GitHub PR review through GitHub MCP, with approval-gated top-level publication.
 - **V3:** authorized event trigger and deterministic inline mapping. MCP remains an integration interface, not the trigger.
 
-V1 is the implemented local product. The current release is
-`v0.1.8`; V2/V3 remain unimplemented. The repository's release-readiness checks
-cover the complete local workflow, installability, Skill instructions,
-acceptance scenarios, and self-hosting evidence.
+V1 is the implemented local product. The latest tagged release is `v0.1.8`.
+Current `main` also contains unreleased cross-host Agent Skill support for
+OpenAI Codex and Claude Code planned for `v0.1.9`. V2/V3 remain unimplemented.
+The repository's release-readiness checks cover the complete local workflow,
+installability, Skill instructions, acceptance scenarios, and self-hosting
+evidence.
 
 ## Install and use the Skill
 
@@ -88,39 +110,16 @@ Treat docs/feature-spec.md as the explicit requirement.
 
 In Claude Code, use `/pre-pr-verify` in the first line instead.
 
-The interactive setup supports working changes, current branch with explicit
-base selection, an inclusive feature-start commit selected from recent history,
-and a custom base/ref. It previews the resolved boundary and size before
-semantic review using Git metadata only; full source capture begins after
-confirmation. Ambiguous custom short refs fail preflight, and unavailable
-content-free line estimates are shown as unavailable. Recommendations and
-large-scope warnings are advisory: the
-Skill never silently selects working changes, `main`, or any other boundary.
-Automation must provide the repository and complete explicit scope/config; if
-anything is missing it fails preflight without prompting or waiting.
+Interactive reviews use explicit scope, requirement, verification
+authorization, and final-confirmation steps. Recommendations and previews are
+advisory, repository commands never grant execution authority, and headless
+invocations fail preflight when required inputs are missing. The reviewer
+examines the complete winning requirement set; presentation and comparison
+bounds do not silently select or drop candidates.
 
-The human setup uses stable numeric choices: working changes, current branch,
-since commit, or custom. Current-branch bases and feature-start commits use
-bounded nested choosers, and Enter accepts only a displayed recommendation as
-an explicit confirmation. Before semantic review, the Skill presents the
-authoritative requirement candidates and a numbered choice to accept a source,
-enter brief criteria, or continue with an explicit Spec `INCONCLUSIVE` warning.
-It then presents the local verification plan and security profile for explicit
-authorization, review without execution, customization, or cancellation, and
-ends with one final confirmation. Repository requirements remain evidence, and
-repository commands never grant execution authority.
-
-When discovery finds same-precedence winning requirement candidates, bounded
-small sets may be presented completely. If the winning set exceeds the
-small-set bound, human-attached setup presents up to five candidates: actual
-relevance recommendations first, followed by canonical-order fallbacks. Only
-validated `recommended_source_ids` receive Recommended markers. This is
-presentation-only: the complete canonical candidate set and authority remain
-unchanged, and acknowledging a source is inspection/context only, not
-authoritative selection.
-
-The reviewer inspects the complete winning requirement set; persisted artifact
-comparison capacity does not cap how many winning sources can be reviewed.
+The detailed chooser mechanics, candidate presentation, authorization handoff,
+and interaction sequencing are defined in the
+[`docs/09_v1_skill_runbook.md`](docs/09_v1_skill_runbook.md) runbook.
 
 The root `SKILL.md` is the full-review entrypoint. It orchestrates the canonical
 Python builders/loaders for ChangeSet, discovery, planning/execution,
